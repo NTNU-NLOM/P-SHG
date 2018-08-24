@@ -108,6 +108,7 @@ out.LP_stepsize = handles.table_LP.Data{2};
 out.wavelength = handles.table_EM.Data{3,2};
 out.meas_time = floor(mod(handles.table_EM.Data{1,2},[0 3600 60])...
     ./[3600 60 1]);
+out.meas_time(3) = handles.table_EM.Data{1,2}; %
 out.meas_freq = handles.table_EM.Data{2,2};
 % Stores the range of the WPs:
 out.HWP_range = handles.table_WP_range.Data(1,:);

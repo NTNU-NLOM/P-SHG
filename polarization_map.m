@@ -90,16 +90,143 @@ function polarization_map_OpeningFcn(hObject, eventdata, handles, varargin)
 % Choose default command line output for polarization_map
 handles.output = hObject;
 
+handles.deco = 1; % init
+
+handles.LP_str = get(handles.LP_str_edt, 'String'); %'newport';
+handles.HWP_str = get(handles.HWP_str_edt, 'String'); %'thorlabs';
+handles.QWP_str= get(handles.QWP_str_edt, 'String'); % 'micos';
+handles.EM_str =  get(handles.PM_str_edt, 'String'); %'tl_pm';
+
+strcell = get(handles.list_com, 'String');
+com_str_qwp = strcell{3}; %'COM';
+com_str_EM = strcell{1}; % 'COM';
+com_str_LP = strcell{2}; % 'COM';
+com_str_hwp = strcell{4};
+
+serialInfo = instrhwinfo('serial');     % Finds available COM ports
+avl= serialInfo.AvailableSerialPorts;
+handles.avl_list=zeros(1,4);
+ct = 0;
+for com={com_str_EM, com_str_LP, com_str_qwp, com_str_hwp}
+    if sum(strcmp(avl,com{1})) % available
+        ct = ct+1;
+        handles.avl_list(ct) = 1;
+    else
+        if length(com{1}) > 3
+            fprintf(2, ['\n ' com{1} ' not available !!\n']) % 2 for red
+        end
+    end
+end
+
+handles.timeout_read_EM = 1; % sec
+handles.timeout_read_LP = 1;
+handles.timeout_read_QWP = 1;
+handles.tag_str_EM = 'thorpm_1';
+handles.tag_str_LP = 'anal';
+handles.tag_str_QWP = 'qwp';
+
+handles.name_dev_list = {handles.EM_str, handles.QWP_str, handles.LP_str}; % both list should match
+handles.baud_rate_list = {115200, 19200, 19200}; % both list should match
+
+handles.baud_rate_EM = handles.baud_rate_list{1};
+handles.baud_rate_LP = handles.baud_rate_list{3};
+handles.baud_rate_QWP = handles.baud_rate_list{2};
+
+% Sets the wavelength of the laser [nm]:
+handles.wavelength = 810;
+
+% Sets the acquisition time of each measurement with the power meter 
+% [h m s]:
+handles.meas_time = [0 0 1];
+% Sets the frequency of the measurements with the power meter [1/s]:
+handles.meas_freq = 10; 
+% Sets the stepsize of the analyzer [deg]:
+handles.LP_stepsize = 30;
+% The range and resolution of the HWP and QWP [deg] (this will determine 
+% for which WP angles the polarization will be measured):
+handles.HWP_range = [0, 60];
+handles.QWP_range = [0, 150];
+handles.HWP_resolution = 30;
+handles.QWP_resolution = 30;
+
+handles.sn_list = [];
+
 % Opens a window containing all the activex controls necessary:
-handles.actx_figure = figure;
-% Top right is the power meter:
-handles.EM = actxcontrol('LabMaxLowLevelControl.LabMaxLowLevCtl.1', [300 200 300 200]); %p
-% Top left is the analyzer:
-handles.LP = actxcontrol('MGMOTOR.MGMotorCtrl.1', [0 200 300 200]); %m
-% Bottom left is the HWP:
-handles.HWP = actxcontrol('MGMOTOR.MGMotorCtrl.1', [300 0 300 200]); %m
-% Bottom right is the QWP:
-handles.QWP = actxcontrol('MGMOTOR.MGMotorCtrl.1', [0 0 300 200]); %m
+handles.actx_figure = figure('Name', 'ActiveX');
+
+%  \\\\ Top right is the power meter PM100: ////
+% % handles.EM = actxcontrol('LabMaxLowLevelControl.LabMaxLowLevCtl.1', [300 200 300 200]); %p
+% com_count = 1;
+% com_str = ['COM',num2str(com_count)];
+if handles.avl_list(1)% [com_str_EM, com_str_LP, com_str_qwp, com_str_hwp]
+    handles.EM = open_com_mp(com_str_EM, handles.baud_rate_EM, handles.tag_str_EM, handles.timeout_read_EM, 0 );
+    disp('EM instr here')
+end
+
+% % MP !!!!!
+% \\\\ Newport ESP ////
+
+if strcmp(handles.LP_str , 'thorlabs')
+    % % Top left is the analyzer:
+%    handles.LP = actxcontrol('MGMOTOR.MGMotorCtrl.1', [0 200 300 200]); %m
+    handles.sn_list{end+1} = 83845971; %!
+    handles.LP = open_actX([0 200 300 200], handles.sn_list{end});
+    handles.HWP.HWSerialNum = handles.sn_list{end}; %!
+    handles.avl_list(2) = 1;
+
+else
+    handles.sn_list{end+1} = 0;
+   if handles.avl_list(2)% [com_str_EM, com_str_LP, com_str_qwp, com_str_hwp]
+        handles.LP = open_com_mp(com_str_LP, handles.baud_rate_LP, handles.tag_str_LP, handles.timeout_read_LP, 1);
+       disp('LP instr here')
+
+   end
+% motor1ID=fscanf(handles.LP,'%s');
+% set(handles.motor1Field,'String',motor1ID);
+end
+
+%  \\\\ Micos QWP rot //// % m
+% serialInfo = instrhwinfo('serial');     % Finds available COM ports
+% if ~isempty(serialInfo.AvailableSerialPorts)
+%     for k=1:length(serialInfo.AvailableSerialPorts)
+%         s_port(k)=serialInfo.AvailableSerialPorts(k);   % Saves in a vector the available COM ports
+%     end
+% % %     set(handles.comPortsPopupMenu,'String',s_port);   % Writes in a popupmenu the s_port elements
+% end
+%read and display motorIDs
+if strcmp(handles.QWP_str , 'thorlabs')
+    % % Bottom right is the QWP:
+    handles.sn_list{end+1} = 83845971; %!
+    handles.QWP = open_actX([0 0 300 200], handles.sn_list{end});
+%     handles.QWP = actxcontrol('MGMOTOR.MGMotorCtrl.1', [0 0 300 200]); %m
+    handles.QWP.HWSerialNum = handles.sn_list{end}; %!
+    handles.avl_list(3) = 1;
+else
+    handles.sn_list{end+1} = 0;
+    if handles.avl_list(3)% [com_str_EM, com_str_LP, com_str_qwp, com_str_hwp]
+        handles.QWP = open_com_mp(com_str_qwp, handles.baud_rate_QWP, handles.tag_str_QWP, handles.timeout_read_QWP, 1);
+       disp('QWP instr here')
+
+    end
+end
+
+
+    % Bottom left is the HWP: (Thorlabs)
+if strcmp(handles.HWP_str , 'thorlabs')
+    handles.sn_list{end+1} = 83842617; %!
+    handles.HWP = open_actX([0 0 400 400], handles.sn_list{end});
+% %     handles.HWP = actxcontrol('MGMOTOR.MGMotorCtrl.1', [0 0 400 400]); %m
+    disp('tl instr here')
+    handles.HWP.HWSerialNum = handles.sn_list{end}; %!
+    handles.avl_list(4) = 1;
+else
+    handles.sn_list{end+1} = 0;
+    if handles.avl_list(4)% [com_str_EM, com_str_LP, com_str_qwp, com_str_hwp]
+        handles.HWP = open_com_mp(com_str_hwp, handles.baud_rate_HWP, handles.tag_str_HWP, handles.timeout_read_HWP, 1);
+        disp('HWP instr here')
+    end
+end
+
 
 % Labels the axes of the figure that will contain the results:
 axes(handles.axes_result)
@@ -108,27 +235,8 @@ xlabel('QWP [deg]')
 ylabel('HWP [deg]')
 
 % Sets the series number for the motors and energy meter:
-handles.LP.HWSerialNum = 83845971; %!
-handles.HWP.HWSerialNum = 83854989; %!
-handles.QWP.HWSerialNum = 83846117; %!
 
-% Sets the stepsize of the analyzer [deg]:
-handles.LP_stepsize = 30;
-
-% Sets the wavelength of the laser [nm]:
-handles.wavelength = 890;
-% Sets the acquisition time of each measurement with the power meter 
-% [h m s]:
-handles.meas_time = [0 0 1];
-% Sets the frequency of the measurements with the power meter [1/s]:
-handles.meas_freq = 10;
-
-% The range and resolution of the HWP and QWP [deg] (this will determine 
-% for which WP angles the polarization will be measured):
-handles.HWP_range = [0, 60];
-handles.QWP_range = [0, 150];
-handles.HWP_resolution = 30;
-handles.QWP_resolution = 30;
+handles.dev_on_list = [0, 0, 0, 0]; % dflt
 
 % Update handles structure
 guidata(hObject, handles);
@@ -156,7 +264,7 @@ function push_connect_Callback(hObject, eventdata, handles)
 % Connects to the motors and power meter:
 [handles, c] = connect_actx(handles);
 % If something went wrong:
-if ~c
+if ~c % c = 0
     % Update handles structure
     guidata(hObject, handles);
     return;
@@ -169,7 +277,7 @@ set(handles.push_single,'Enable','on');
 
 % Disables to the connect button and the properties menu:
 set(hObject,'Enable','off');
-set(handles.menu_prop,'Enable','off');
+% % set(handles.menu_prop,'Enable','off');
 % Enables to the disconnect button:
 set(handles.push_disconnect,'Enable','on')
 
@@ -205,6 +313,7 @@ function push_start_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % Removes all previous results:
+
 handles = clear_results(handles);
 
 % Sets the stop variable to false:
@@ -230,11 +339,19 @@ handles.fitted_parameters.pol_angle = zeros(k,1);
 % Creates a figure into which all the fittings will be plotted, so the user
 % can see the progression of the measurements:
 handles.overview_figure = figure('position',[10,50,(k*75)+75,(l*75)+75]);
-for x = 1:k
-    for y = 1:l
+
+vectx=1:k;
+vecty = 1:l;
+
+for x = vectx
+    fprintf('x is at %d/%d \n', x, k);
+    for y = vecty
+        fprintf('y is at %d/%d \n', y, l);
         % Rotates the QWP and HWP to specific angles:
-        handles.QWP.MoveAbsoluteRot(0,handles.QWP_values(x,y),0,3,1); %m
-        handles.HWP.MoveAbsoluteRot(0,handles.HWP_values(x,y),0,3,1); %m
+% %         handles.QWP.MoveAbsoluteRot(0,handles.QWP_values(x,y),0,3,1); %m
+        move_rot_mp(handles.QWP_str, handles.QWP, handles.QWP_values(x,y));
+        move_rot_mp(handles.HWP_str, handles.HWP, handles.HWP_values(x,y));
+% %         handles.HWP.MoveAbsoluteRot(0,handles.HWP_values(x,y),0,3,1); %m
         
         % Measures the polarization:
         [handles, I] = ellipticity_analyzer(handles);
@@ -247,9 +364,11 @@ for x = 1:k
         pause(0.1)
         % In order for the stop button to function we have to check 
         % throughout the code if it has been pushed:
+        guidata(hObject, handles);
+
         if getappdata(0,'stop')
             % Update handles structure
-            guidata(hObject, handles);
+            fprintf(2, 'stop detected inside calib : end.\n');
             % Ends the calibration:
             return;
         end
@@ -290,8 +409,10 @@ function push_single_Callback(hObject, eventdata, handles)
 d = handles.table_single_settings.Data;
 QWP = d(1); HWP = d(2);
 % Rotates the QWP and HWP to specific angles:
-handles.QWP.MoveAbsoluteRot(0,QWP,0,3,1); %m
-handles.HWP.MoveAbsoluteRot(0,HWP,0,3,1); %m
+% % handles.QWP.MoveAbsoluteRot(0,QWP,0,3,1); %m
+% % handles.HWP.MoveAbsoluteRot(0,HWP,0,3,1); %m
+move_rot_mp(handles.QWP_str, handles.QWP, 0);
+move_rot_mp(handles.HWP_str, handles.HWP, 0);
 % The analyzer angles:
 handles.LP_values = 0:handles.LP_stepsize:180;
 % Does the intensity measurement:
@@ -366,7 +487,8 @@ function [handles,I] = ellipticity_analyzer(handles)
 % The angles of the analyzer for which the intensity will be measured:
 LP = handles.LP_values;
 % Checks the start position:
-start_pos = handles.LP.GetPosition_Position(0); %m
+% % start_pos = handles.LP.GetPosition_Position(0); %m
+start_pos = get_pos_mp(handles.LP_str, handles.LP);
 % For a linear polarizer 180 degrees = 0 degrees:
 if start_pos >= 180
     start_pos = 360-start_pos;
@@ -388,22 +510,29 @@ t = sum(handles.meas_time.*[3600 60 1]);
 % Measures the intensity as a function of the angles of the analyzer:
 for i = 1:length(LP)
     % Moves the analyzer to the correct angle:
-    handles.LP.MoveAbsoluteRot(0,LP(i),0,3,1); %m
+%     handles.LP.MoveAbsoluteRot(0,LP(i),0,3,1); %m
+    move_rot_mp(handles.LP_str, handles.LP, LP(i))
     % Asks the power meter to take a measurement:
-    handles.EM.SendCommandOrQuery(0,'CONFigure:STATistics:STARt'); %p
+% %     handles.EM.SendCommandOrQuery(0,'CONFigure:STATistics:STARt'); 
     % Wait for the power meter to finish:
-    pause(t);
+     pause(t);
     % Acquires the measurement (will be an array containing: AV, DEV, MIN, 
     % MAX, DOSE, MISSED, SEQ):
-    handles.EM.SendCommandOrQuery(0,'STATistics:FETCh:NEXT?'); %p
-    r = str2num(handles.EM.GetNextString(0)); %p
-    % Check if the measurement has been received:
-    while isempty(r)
-        handles.EM.SendCommandOrQuery(0,'STATistics:FETCh:NEXT?'); %p
-        r = str2num(handles.EM.GetNextString(0)); %p
-    end
+% %     handles.EM.SendCommandOrQuery(0,'STATistics:FETCh:NEXT?'); 
+% %     r = str2num(handles.EM.GetNextString(0)); 
+% %     % Check if the measurement has been received:
+% %     while isempty(r)
+% %         handles.EM.SendCommandOrQuery(0,'STATistics:FETCh:NEXT?'); 
+% %         r = str2num(handles.EM.GetNextString(0)); 
+% %     end
     % Sets the intensity equal to the average:
-    I(i) = r(1);
+    maxj = round(handles.meas_freq*(handles.meas_time(1)*3600+handles.meas_time(2)*60+handles.meas_time(3))); % h m s
+    tmp = zeros(1, maxj);
+    for jj =1:maxj
+        tmp(jj) = str2double(query(handles.EM,':POWER?')); %r(1); % p
+    end
+% %     disp(tmp) % it's ok, there is no latencies
+    I(i) = median(tmp); % it's a median
 end
 % If the LP order was inverted:
 if change_order == 1
@@ -466,7 +595,8 @@ figure(handles.overview_figure)
 [k,l] = size(handles.QWP_values);
 h = subplot('Position',[i/(k+1),(l-j)/(l+1),1/(k+1),1/(l+1)]);
 plot(x,y,'b.',x_fit,y_fit,'r');
-axis([-0.5 0.5 -0.5 0.5])
+fact = 0.12;
+axis([-fact, fact, -fact, fact])
 axis('equal')
 set(h,'xtick',[],'ytick',[],'box','off','xcolor','w','ycolor','w')
 if j == 1 && i == ceil(k/2)
@@ -567,9 +697,9 @@ HWP_diff = handles.fitted_parameters.HWP_diff;
 % Solves theoretical model for circularly polarized light:
 % Equation 1:
 syms phi;
-x = atan(-gamma*sind(delta)/(gamma*cosd(delta)*tan(phi)-1));
+x = atan(-gamma*sind(delta)/(gamma*cosd(delta)*tan(phi)-1)); %#ok<NODEF>
 y = atan((gamma*cosd(delta)-tan(phi))/(gamma*sind(delta)*tan(phi)));
-phi = solve(x == y,phi,'IgnoreAnalyticConstraints',true); k = 1; 
+phi = solve(x == y,phi,'IgnoreAnalyticConstraints',true); %k = 1;  % !!!
 phi = eval(phi);
 WP_diff(1:2) = rad2deg(eval(x));
 QWP_rel(1:2) = rad2deg(phi);
@@ -577,7 +707,8 @@ QWP_rel(1:2) = rad2deg(phi);
 syms phi;
 x =  atan(-gamma*sind(delta)/(gamma*cosd(delta)*tan(phi)+1));
 y = atan((gamma*cosd(delta)+tan(phi))/(gamma*sind(delta)*tan(phi)));
-phi = solve(x == y,phi,'IgnoreAnalyticConstraints',true); k = 1; 
+phi = solve(x == y,phi,'IgnoreAnalyticConstraints',true); 
+% k = 1;  % !!!
 phi = eval(phi);
 WP_diff(3:4) = rad2deg(eval(x));
 QWP_rel(3:4) = rad2deg(phi);
@@ -663,6 +794,12 @@ set(handles.menu_save,'Enable','off');
 set(handles.push_cali,'Enable','off');
 set(handles.popup_result,'Enable','off');
 
+for ii=2:5
+    try  %#ok<TRYNC>
+        close(ii); % figs, not GUI
+    end
+end
+
 % --- Images a calibrated parameter in the result window:
 function [handles] = image_result(handles)
 % handles    structure with handles and user data (see GUIDATA)
@@ -698,7 +835,7 @@ switch v
         c = [0 180];
         cm = 'hsv';
 end
-[k,l] = size(r);
+% [k,l] = size(r); % !!!
 % Plots the result:
 axes(handles.axes_result)
 x = handles.QWP_values(:,1)';
@@ -777,84 +914,166 @@ I = I0*((d1.^2 + d2.^2).*(cosd(alpha).^2) + ...
 % ----------- Connecting and disconnecting the activeX controls: ----------
 
 % --- Connects to the motors and power meter:
-function [handles, connected] = connect_actx(handles)
+function [handles, c] = connect_actx(handles)
 % handles    structure with handles and user data (see GUIDATA)
 % connected  boolean stating if the connection was successfull
 
 % Connects to the power meter:
-handles.EM.Initialize(); %p
+% handles.EM.Initialize(); %p
 
 % Sets the communication mode to USB:
-set(handles.EM,'CommunicationMode',1); %p
+% set(handles.EM,'CommunicationMode',1); %p
 % Checks the serial number:
-if isempty(handles.EM.SerialNumber(0)) %p
-    handles = disconnect_actx(handles);
-    warning('Could not connect to the power meter.');
-    connected = 0;
-    return
-else
-    connected = 1;
+% % if isempty(handles.EM.SerialNumber(0)) %p
+% %     handles = disconnect_actx(handles);
+% %     warning('Could not connect to the power meter.');
+% %     connected = 0;
+% %     return
+% % else
+% %     connected = 1;
+% % end
+if (isfield(handles, 'EM') && ~handles.dev_on_list(1))  %p
+    handles.dev_on_list(1) = stctrl_instr_mp(handles.EM_str, handles.EM);
+    disp('EM instr ON')
+%     connected = 1;
 end
+% not used : units are always watt, acq time not settable !!!!!
 
-% Sets the units to watt:
-handles.EM.SendCommandOrQuery(0,'CONFigure:MEASure W'); %p
-% Sets the laser wavelength:
-handles.EM.SendCommandOrQuery(0,'CONFigure:WAVElength:CORRection ON'); %p
-handles.EM.SendCommandOrQuery(0,['CONFigure:WAVElength:WAVElength ' ...
-    num2str(handles.wavelength)]); %p
-% Sets the acquisition time of the power meter:
-handles.EM.SendCommandOrQuery(0,['CONFigure:STATistics:BSIZe:TIME ' ...
-    num2str(handles.meas_time(1),'%02.0f') ...
-    ':' num2str(handles.meas_time(2),'%02.0f') ...
-    ':' num2str(handles.meas_time(3),'%02.0f')]); %p
-% Sets the frequency of the power meter:
-handles.EM.SendCommandOrQuery(0,['CONFigure:STATistics:RATE:FREQuency ' ...
-    num2str(handles.meas_freq)]); %p
-% Determines if the data sent from the machine should have any headers:
-handles.EM.SendCommandOrQuery(0,'CONFigure:READings:HEADers OFF'); %p
-% Sets that we want the last available record and not a stream:
-handles.EM.SendCommandOrQuery(0,'CONFigure:READings:CONTinuous LAST'); %p
+% % Sets the units to watt:
+% handles.EM.SendCommandOrQuery(0,'CONFigure:MEASure W'); %p
 
-% Changes the display to the statistics mode:
-handles.EM.SendCommandOrQuery(0,'CONFigure:DISPlay:STATistics'); %p
-% Enables the collection of statistical data for sending to the host:
-handles.EM.SendCommandOrQuery(0,'STATistics:INITiate'); %p
-% Collects all data in case there is any registered:
-handles.EM.SendCommandOrQuery(0,'STATistics:FETCh:ALL?'); %p
-handles.EM.GetNextString(0); %p
+% % Sets the laser wavelength:
+% handles.EM.SendCommandOrQuery(0,'CONFigure:WAVElength:CORRection ON'); %p
+% handles.EM.SendCommandOrQuery(0,['CONFigure:WAVElength:WAVElength ' ...
+%     num2str(handles.wavelength)]); %p
+
+% % Sets the acquisition time of the power meter:
+% handles.EM.SendCommandOrQuery(0,['CONFigure:STATistics:BSIZe:TIME ' ...
+%     num2str(handles.meas_time(1),'%02.0f') ...
+%     ':' num2str(handles.meas_time(2),'%02.0f') ...
+%     ':' num2str(handles.meas_time(3),'%02.0f')]); %p
+
+% % Sets the frequency of the power meter:
+% handles.EM.SendCommandOrQuery(0,['CONFigure:STATistics:RATE:FREQuency ' ...
+%     num2str(handles.meas_freq)]); %p
+
+% % Determines if the data sent from the machine should have any headers:
+% handles.EM.SendCommandOrQuery(0,'CONFigure:READings:HEADers OFF'); %p
+% % Sets that we want the last available record and not a stream:
+% handles.EM.SendCommandOrQuery(0,'CONFigure:READings:CONTinuous LAST'); %p
+
+% % Changes the display to the statistics mode:
+% handles.EM.SendCommandOrQuery(0,'CONFigure:DISPlay:STATistics'); %p
+% % Enables the collection of statistical data for sending to the host:
+% handles.EM.SendCommandOrQuery(0,'STATistics:INITiate'); %p
+% % Collects all data in case there is any registered:
+% handles.EM.SendCommandOrQuery(0,'STATistics:FETCh:ALL?'); %p
+% handles.EM.GetNextString(0); %p
 
 % Initializes the motors:
-handles.LP.StartCtrl; %m
-handles.HWP.StartCtrl; %m
-handles.QWP.StartCtrl; %m
-% Gives the GUI time to update:
-pause(0.5)
-
-% Homes the motors:
-c(1) = handles.LP.MoveHome(0,1); %m
-c(2) = handles.HWP.MoveHome(0,1); %m
-c(3) = handles.QWP.MoveHome(0,1); %m
-
-if sum(c) ~= 0
-    handles = disconnect_actx(handles);
-    warning('Could not connect to the motors.');
-    connected = 0;
-    return
+% % handles.LP.StartCtrl; %m
+% % handles.HWP.StartCtrl; %m
+% % handles.QWP.StartCtrl; %m
+ins_str = {handles.LP_str, handles.QWP_str, handles.HWP_str};
+names={'LP', 'QWP','HWP'};
+% % instrs=[handles.LP, handles.QWP, handles.HWP];
+for ii=1:3
+    if (isfield(handles, names{ii}) && ~handles.dev_on_list(ii+1))
+        disp(['checking ' ins_str{ii} ' ...']);
+        switch ii
+            case 1
+                instr = handles.LP;
+            case 2
+                instr = handles.QWP;
+            case 3
+                instr = handles.HWP;
+        end
+        connected = stctrl_instr_mp(ins_str{ii}, instr);
+        handles.dev_on_list(ii+1) = connected; % EM, LP, QWP. HWP
+        home_mot_mp(ins_str{ii}, instr); % home simultaneously
+    end
 end
+
+for ii=1:3 % wait home 
+    if handles.dev_on_list(ii+1)
+        switch ii
+            case 1
+                instr = handles.LP;
+            case 2
+                instr = handles.QWP;
+            case 3
+                instr = handles.HWP;
+        end
+        if strcmp(ins_str{ii},'thorlabs')
+            pause(0.5) % Gives the GUI time to update:
+        else
+            wait_move(ins_str{ii}, instr);
+            if strcmp(ins_str{ii},'newport')
+                disp(query(instr,'1TP?\r'));
+            elseif strcmp(ins_str{ii},'micos') 
+                disp(query(instr,'1 npos ')); % get pos
+            end
+        end
+        fprintf('\n %s instr ON \n', ins_str{ii})
+    end
+end
+
+% % % Homes the motors:
+% % % % c(1) = handles.LP.MoveHome(0,1); %m
+% % % % c(2) = handles.HWP.MoveHome(0,1); %m
+% % % % c(3) = handles.QWP.MoveHome(0,1); %m
+% % 
+% % if sum(c) ~= 0
+% %     handles = disconnect_actx(handles);
+% %     warning('Could not connect to the motors.');
+% %     handles.dev_on_list(4) = 0;
+% %     return
+% % end
+c= sum(handles.dev_on_list);
+handles.deco = 0;
 
 % --- Disconnects the motors and power meters:
 function [handles] = disconnect_actx(handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % Stops the motors:
-handles.LP.StopCtrl; %m
-handles.HWP.StopCtrl; %m
-handles.QWP.StopCtrl; %m
+% % handles.LP.StopCtrl; %m
+% % handles.HWP.StopCtrl; %m
+% % handles.QWP.StopCtrl; %m
+if handles.avl_list(2)% [com_str_EM, com_str_LP, com_str_qwp, com_str_hwp]
+    close_com_mp(handles.LP_str, handles.LP, handles.dev_on_list(2));
+    disp('LP discon.');
+    handles.avl_list(2) = 0;
+    handles.dev_on_list(2) = 0;
+end
+if handles.avl_list(4)
+    close_com_mp(handles.HWP_str, handles.HWP, handles.dev_on_list(4));
+    disp('HWP discon.');
+    handles.avl_list(4) = 0;
+    handles.dev_on_list(4) = 0;
+
+end
+if handles.avl_list(3)
+    close_com_mp(handles.QWP_str, handles.QWP, handles.dev_on_list(3));
+    disp('QWP discon.');
+    handles.avl_list(3) = 0;
+    handles.dev_on_list(3) = 0;
+
+end
 
 % Disables the collection of data:
-handles.EM.SendCommandOrQuery(0,'STATistics:ABORt'); %p
-% Discontect the meter:
-handles.EM.DeInitialize(); %p
+% handles.EM.SendCommandOrQuery(0,'STATistics:ABORt'); %p
+% % Discontect the meter:
+% handles.EM.DeInitialize(); %p
+if handles.avl_list(1)
+    fclose(handles.EM);%p
+    disp('EM discon.');
+    handles.avl_list(1) = 0;
+    handles.dev_on_list(1) = 0;
+
+end
+
+handles.deco = 1;
 
 % -------------------------------------------------------------------------
 % -------------------------- MENU FUNCTIONS: ------------------------------
@@ -876,7 +1095,7 @@ if file == 0
 end
 
 % Loads the variables to the workspace:
-load([path file]);
+load([path file]); %#ok<LOAD>
 try
     handles.QWP_values = measured_parameters.QWP;
     handles.HWP_values = measured_parameters.HWP;
@@ -926,7 +1145,7 @@ end
 measured_parameters.QWP = handles.QWP_values;
 measured_parameters.HWP = handles.HWP_values;
 measured_parameters.I = handles.intensity_measurements;
-measured_parameters.LP = handles.LP_values;
+measured_parameters.LP = handles.LP_values; %#ok<STRNU>
 fitted_parameters.polarization.E_max = handles.fitted_parameters.E_max;
 fitted_parameters.polarization.E_min = handles.fitted_parameters.E_min;
 fitted_parameters.polarization.pol_angle = handles.fitted_parameters.pol_angle;
@@ -937,7 +1156,7 @@ if isfield(handles.fitted_parameters,'I0')
         fitted_parameters.map.HWP_diff = handles.fitted_parameters.HWP_diff;
         fitted_parameters.map.QWP_diff = handles.fitted_parameters.QWP_diff;
         fitted_parameters.map.LP_diff = handles.fitted_parameters.LP_diff;
-        fitted_parameters.map.delta = handles.fitted_parameters.delta;
+        fitted_parameters.map.delta = handles.fitted_parameters.delta; %#ok<STRNU>
     end
 end
 % Saves the results:
@@ -971,10 +1190,10 @@ function menu_save_single_Callback(hObject, eventdata, handles)
 [file, path] = uiputfile('*.mat','Save Single Measurement As');
 
 % Collects the variables that will be saved:
-I = handles.intensity_single;
-LP = handles.LP_single;
-QWP = handles.QWP_single;
-HWP = handles.HWP_single;
+I = handles.intensity_single; %#ok<NASGU>
+LP = handles.LP_single; %#ok<NASGU>
+QWP = handles.QWP_single; %#ok<NASGU>
+HWP = handles.HWP_single; %#ok<NASGU>
 % Saves the variables:
 save([path file],'I','LP','QWP','HWP');
   
@@ -985,9 +1204,21 @@ function menu_prop_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % Collects all the parameters that can be changed:
-in.HWSerialNum(1,1) = handles.LP.HWSerialNum;
-in.HWSerialNum(2,1) = handles.HWP.HWSerialNum;
-in.HWSerialNum(3,1) = handles.QWP.HWSerialNum;
+if strcmp(handles.LP_str , 'thorlabs')
+    in.HWSerialNum(1,1) = handles.LP.HWSerialNum;
+else
+    in.HWSerialNum(1,1) = 0;
+end
+if strcmp(handles.HWP_str , 'thorlabs')
+    in.HWSerialNum(2,1) = handles.HWP.HWSerialNum;
+else
+    in.HWSerialNum(2,1) = 0;
+end
+if strcmp(handles.QWP_str , 'thorlabs')
+    in.HWSerialNum(3,1) = handles.QWP.HWSerialNum;
+else
+    in.HWSerialNum(3,1) = 0;
+end
 in.LP_stepsize = handles.LP_stepsize;
 in.wavelength = handles.wavelength;
 in.meas_time = handles.meas_time;
@@ -1005,9 +1236,15 @@ if isempty(out)
 end
 
 % Stores all the data that could be changed:
-handles.LP.HWSerialNum = out.HWSerialNum(1);
-handles.HWP.HWSerialNum = out.HWSerialNum(2);
-handles.QWP.HWSerialNum = out.HWSerialNum(3);
+if strcmp(handles.LP_str , 'thorlabs')
+    handles.LP.HWSerialNum = out.HWSerialNum(1);
+end
+if strcmp(handles.HWP_str , 'thorlabs')
+    handles.HWP.HWSerialNum = out.HWSerialNum(2);
+end
+if strcmp(handles.QWP_str , 'thorlabs')
+    handles.QWP.HWSerialNum = out.HWSerialNum(3);
+end
 handles.LP_stepsize = out.LP_stepsize;
 handles.wavelength = out.wavelength;
 handles.meas_time = out.meas_time;
@@ -1036,9 +1273,436 @@ function figure1_CloseRequestFcn(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % Disconnects all activex controls if they are not already deactivated:
-handles = disconnect_actx(handles);
+if ~handles.deco
+    handles = disconnect_actx(handles);
+end
 % Closes the figure containing the activex controls:
-close(handles.actx_figure);
-
+if isvalid(handles.actx_figure)
+    close(handles.actx_figure);
+end
 % Hint: delete(hObject) closes the figure
 delete(hObject);
+
+
+function move_rot_mp(str_mot, mot_obj, mot_value)
+% 2018.8 Maxime Pinsard
+% to move the rotation stage depending on their neture
+
+% disp(ok)
+
+    switch str_mot
+        case 'micos' % DT80
+            fprintf(mot_obj,'%f 1 nm ', mot_value);
+            wait_move(mot_obj, str_mot);
+        case 'newport' % ESP100
+            fprintf(mot_obj, '1PA%d\r', mot_value); % move to
+            wait_move(mot_obj, str_mot);
+        case 'thorlabs' % Z rot
+            mot_obj.MoveAbsoluteRot(0, mot_value,0,3,1); 
+    end
+
+function mot_value = get_pos_mp(str_mot, mot_obj)
+% 2018.8 Maxime Pinsard
+% to get the pos depending on their neture
+
+    % disp(ok)
+
+    switch str_mot
+        case 'micos' % DT80
+            mot_value = str2double(query(mot_obj,'1 npos '));
+        case 'newport' % ESP100
+            mot_value = str2double(query(mot_obj, '1TP')); % mm
+        case 'thorlabs' % Z rot
+            mot_value = mot_obj.GetPosition_Position(0); %m
+
+    end
+    
+function home_mot_mp(str_mot, mot_obj)
+% 2018.8 Maxime Pinsard
+
+    switch str_mot
+        case 'micos' % DT80
+            fprintf(mot_obj,'1 ncal ');
+
+        case 'newport' % ESP100
+            fprintf(mot_obj, '1OR'); % no \r
+            
+        case 'thorlabs' % Z rot
+            if mot_obj.GetPosition_Position(0)>0 %m
+                mot_obj.MoveHome(0,1);
+            end
+    end
+    
+function wait_move(mot_obj, id)
+    ct=0;
+    while ct<17 
+        switch id 
+            case 'newport'
+                a = query(mot_obj, '1MD?\r');
+                if (~isempty(a) && str2double(a)) % 0 if it's moving
+                    break % outside while 
+                end
+            case 'micos'
+                a = query(mot_obj, '1 nst ');
+                if (~isempty(a) && ~str2double(a)) % 1 if it is moving
+                    break
+                end
+        end
+        pause(0.3)
+        ct = ct+1;
+    end
+    
+function connected = stctrl_instr_mp(str_mot, mot_obj)
+% 2018.8 Maxime Pinsard
+
+    if ~strcmp(str_mot, 'thorlabs')
+        try
+            fopen(mot_obj);  %p
+        catch ME
+            if strcmp(ME.identifier, 'MATLAB:serial:fopen:opfailed') % not connected
+                warning('Could not connect to the device %s', str_mot);
+                connected = 0; %p
+                return
+            else
+                rethrow(ME);
+            end
+        end
+    end
+    connected = 1;
+
+    switch str_mot
+        case 'micos' % DT80
+            lastwarn(''); % Clear last warning message
+            disp(query(mot_obj,'1 gnv ')) % velocity
+            [warnMsg, ~] = lastwarn;
+            if ~isempty(warnMsg)
+                fprintf(2, ['\n ' str_mot ' not available !!\n']);
+                connected = 0;
+            end
+        case 'newport' % ESP100
+             lastwarn(''); % Clear last warning message
+             disp(query(mot_obj,'1ID?\r'));
+             [warnMsg, ~] = lastwarn;
+            if ~isempty(warnMsg)
+                fprintf(2, ['\n ' str_mot ' not available !!\n']);
+                connected = 0;
+            end
+            fprintf(mot_obj, '1MO'); % puts the motor on
+        case 'thorlabs' % Z rot
+            mot_obj.StartCtrl;
+        case 'tl_pm' % power meter
+            lastwarn(''); % Clear last warning message
+            disp(query(mot_obj,'*IDN?')) %p
+            disp(query(mot_obj,':HEAD:INFO?')); % S/N, ID-Text, short description, Maximum Power)
+            [warnMsg, ~] = lastwarn;
+            if ~isempty(warnMsg)
+                fprintf(2, ['\n ' str_mot ' not available !!\n']);
+                connected = 0;
+            end
+    end
+    
+    
+function mot_obj = open_com_mp(com_str, baud_rate, tag_str, timeout_read, term_char)
+% 2018.8 Maxime Pinsard
+
+    mot_obj = serial(com_str,...
+        'BaudRate',baud_rate,...
+        'DataBits',8, ...
+        'Parity','none', ...
+        'StopBits',1, ...
+        'tag',tag_str,...
+        'Timeout', timeout_read);  %the terminator is "line feed" automatically
+    if term_char
+        set(mot_obj,'Terminator','CR');
+    end
+    
+function reinit_com_mp(port_str)
+% 2018.8 Maxime Pinsard
+
+        % if fail
+    ports = instrfind('Port', port_str);
+    
+    if ~isempty(ports)
+        disp(ports)
+        fclose(ports);
+    end
+
+function close_com_mp(str_mot, mot_obj, dev_on)
+% 2018.8 Maxime Pinsard
+
+   switch str_mot
+        case 'micos' % DT80
+            fclose(mot_obj);
+        case 'newport' % ESP100
+            if dev_on 
+                fprintf(mot_obj, '1MF'); % off motor
+                pause(0.5);
+            end
+            fclose(mot_obj);
+        case 'thorlabs' % Z rot
+            mot_obj.StopCtrl;
+        case 'tl_pm' % power meter
+           
+    end
+
+% --- Executes on button press in clean_sel_push.
+function clean_sel_push_Callback(hObject, eventdata, handles)
+% hObject    handle to clean_sel_push (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+ind = get(handles.list_com, 'Value');
+strcell = get(handles.list_com, 'String');
+
+if length(strcell{ind})> 3 % com smthg
+    reinit_com_mp(strcell{ind})
+end
+
+% --- Executes on selection change in list_com.
+function list_com_Callback(hObject, eventdata, handles)
+% hObject    handle to list_com (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: contents = cellstr(get(hObject,'String')) returns list_com contents as cell array
+%        contents{get(hObject,'Value')} returns selected item from list_com
+
+
+% --- Executes during object creation, after setting all properties.
+function list_com_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to list_com (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: listbox controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function QWP_str_edt_Callback(hObject, eventdata, handles)
+% hObject    handle to QWP_str_edt (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of QWP_str_edt as text
+%        str2double(get(hObject,'String')) returns contents of QWP_str_edt as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function QWP_str_edt_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to QWP_str_edt (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function PM_str_edt_Callback(hObject, eventdata, handles)
+% hObject    handle to PM_str_edt (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of PM_str_edt as text
+%        str2double(get(hObject,'String')) returns contents of PM_str_edt as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function PM_str_edt_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to PM_str_edt (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function LP_str_edt_Callback(hObject, eventdata, handles)
+% hObject    handle to LP_str_edt (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of LP_str_edt as text
+%        str2double(get(hObject,'String')) returns contents of LP_str_edt as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function LP_str_edt_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to LP_str_edt (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function HWP_str_edt_Callback(hObject, eventdata, handles)
+% hObject    handle to HWP_str_edt (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of HWP_str_edt as text
+%        str2double(get(hObject,'String')) returns contents of HWP_str_edt as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function HWP_str_edt_CreateFcn(hObject, eventdata, handles) %#ok<*INUSD>
+% hObject    handle to HWP_str_edt (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+% --- Executes on button press in chg_sel_push.
+function chg_sel_push_Callback(hObject, eventdata, handles) %#ok<*INUSL,*DEFNU>
+% hObject    handle to chg_sel_push (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+num= 0;% dflt
+ind = get(handles.list_com, 'Value');
+strcell = get(handles.list_com, 'String');
+
+if length(strcell{ind})> 3 % com smthg
+    reinit_com_mp(strcell{ind});
+    
+    switch ind
+        case 1
+            handles.EM_str =  get(handles.PM_str_edt, 'String'); %'tl_pm';
+            if ~strcmp(handles.EM_str , 'thorlabs')
+                handles.baud_rate_EM = handles.baud_rate_list{strcmp(handles.name_dev_list, handles.EM_str)};
+                handles.EM = open_com_mp(strcell{ind}, handles.baud_rate_EM, handles.tag_str_EM, handles.timeout_read_EM, 0);
+                num= 1;
+            end
+        case 2
+            handles.LP_str = get(handles.LP_str_edt, 'String'); %'newport';
+            if ~strcmp(handles.LP_str , 'thorlabs')
+                handles.baud_rate_LP = handles.baud_rate_list{strcmp(handles.name_dev_list, handles.LP_str)};
+                handles.LP = open_com_mp(strcell{ind}, handles.baud_rate_LP, handles.tag_str_LP, handles.timeout_read_LP, 1);
+                num= 2;
+            end
+
+        case 3
+            handles.QWP_str= get(handles.QWP_str_edt, 'String'); % 'micos';
+            if ~strcmp(handles.QWP_str , 'thorlabs')
+                handles.baud_rate_QWP = handles.baud_rate_list{strcmp(handles.name_dev_list, handles.QWP_str)};
+                handles.QWP = open_com_mp(strcell{ind}, handles.baud_rate_QWP, handles.tag_str_QWP, handles.timeout_read_QWP, 1);
+                num= 3;
+            end
+        case 4
+%             handles.HWP =  % activeX
+            handles.HWP_str = get(handles.HWP_str_edt, 'String'); %'thorlabs';
+            if ~strcmp(handles.HWP_str , 'thorlabs')
+                handles.baud_rate_HWP = handles.baud_rate_list{strcmp(handles.name_dev_list, handles.HWP_str)};
+                handles.HWP = open_com_mp(strcell{ind}, handles.baud_rate_HWP, handles.tag_str_HWP, handles.timeout_read_HWP, 1);
+                num= 4;
+            end
+
+    end
+    
+    if num
+        serialInfo = instrhwinfo('serial');     % Finds available COM ports
+        avl= serialInfo.AvailableSerialPorts; 
+        if sum(strcmp(avl,strcell{ind})) % available
+            handles.avl_list(num)=1; % % [com_str_EM, com_str_LP, com_str_qwp, com_str_hwp]
+        end
+    end
+end
+
+% Update handles structure
+guidata(hObject, handles);
+
+
+
+function chg_com_edt_Callback(hObject, eventdata, handles)
+% hObject    handle to chg_com_edt (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of chg_com_edt as text
+%        str2double(get(hObject,'String')) returns contents of chg_com_edt as a double
+
+ind = get(handles.list_com, 'Value');
+str_all = get(handles.list_com, 'String' );
+str_all{ind} = get(hObject,'String');
+set(handles.list_com, 'String', str_all);
+set(hObject,'String', 'chg here');
+
+
+% --- Executes during object creation, after setting all properties.
+function chg_com_edt_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to chg_com_edt (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+function instr = open_actX(vect, sn)
+    try
+         instr = actxcontrol('MGMOTOR.MGMotorCtrl.1', vect); %m
+         instr.HWSerialNum = sn; %!
+    catch ME
+        if strcmp(ME.identifier, 'MATLAB:COM:InvalidProgid')
+            fprintf(2, 'lib actx not here\n');
+            instr.a=0;
+        else
+            rethrow(ME);
+        end
+    end   
+
+
+% --- Executes on button press in reopen_activeX_push.
+function reopen_activeX_push_Callback(hObject, eventdata, handles)
+% hObject    handle to reopen_activeX_push (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+if isempty(findobj('type','figure','name','Activex'))
+    handles.actx_figure = figure('Name', 'ActiveX');
+    ct = 0;
+    for k =1:length(handles.sn_list)
+        ct = ct+1;
+        if handles.sn_list{k} ~= 0
+            switch ct
+                case 1
+                    handles.LP = open_actX([0+(k-1)*100, 0+max(0,(k-2)*100), 400, 400], handles.sn_list{k});
+                    handles.LP.StartCtrl;
+                    handles.avl_list(2) = 1;
+                case 2
+                    handles.QWP = open_actX([0+(k-1)*100, 0+max(0,(k-2)*100), 400, 400], handles.sn_list{k});
+                    handles.QWP.StartCtrl;
+                    handles.avl_list(3) = 1;
+                case 3
+                    handles.HWP = open_actX([0+(k-1)*100, 0+max(0,(k-2)*100), 400, 400], handles.sn_list{k});
+                    handles.HWP.HWSerialNum = handles.sn_list{k};
+                    handles.HWP.StartCtrl;
+                    handles.avl_list(4) = 1;
+            end
+        end
+    end
+end
+
+guidata(hObject, handles);

@@ -43,7 +43,7 @@ end
 % End initialization code - DO NOT EDIT
 
 % --- Executes just before properties_polarization_map is made visible.
-function properties_polarization_map_OpeningFcn(hObject, eventdata, handles, varargin)
+function properties_polarization_map_OpeningFcn(hObject, eventdata, handles, varargin) %#ok<*INUSL>
 % This function has no output args, see OutputFcn.
 % hObject    handle to figure
 % eventdata  reserved - to be defined in a future version of MATLAB
@@ -72,6 +72,7 @@ handles.table_WP_range.Data(2,:) = prop.QWP_range;
 % Enters the resolution of the WPs:
 handles.table_WP_resolution.Data{1,2} = prop.HWP_resolution;
 handles.table_WP_resolution.Data{2,2} = prop.QWP_resolution;
+handles.arr_2exclude = prop.arr_2exclude;
 
 % Update handles structure
 guidata(hObject, handles);
@@ -93,7 +94,7 @@ varargout{1} = handles.output;
 delete(handles.figure1);
 
 % --- Executes on button press in push_save.
-function push_save_Callback(hObject, eventdata, handles)
+function push_save_Callback(hObject, eventdata, handles) %#ok<*DEFNU>
 % hObject    handle to push_save (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
@@ -114,8 +115,16 @@ out.meas_freq = handles.table_EM.Data{2,2};
 out.HWP_range = handles.table_WP_range.Data(1,:);
 out.QWP_range = handles.table_WP_range.Data(2,:);
 % Stores the resolution of the WPs:
-out.HWP_resolution = handles.table_WP_resolution.Data{1,2};
-out.QWP_resolution = handles.table_WP_resolution.Data{2,2};
+out.HWP_resolution = min(handles.table_WP_resolution.Data{1,2}, abs(out.HWP_range(2)-out.HWP_range(1)));
+out.QWP_resolution = min(handles.table_WP_resolution.Data{2,2}, abs(out.QWP_range(2)-out.QWP_range(1)));
+v= [max(1, length(out.HWP_range(1):out.HWP_resolution:out.HWP_range(2))), ...
+    max(1, length(out.QWP_range(1):out.QWP_resolution:out.QWP_range(2)))];
+if sum(size(handles.arr_2exclude) ~= v)
+    handles.arr_2exclude = zeros(length(out.HWP_range(1):out.HWP_resolution:out.HWP_range(2)), ...
+    length(out.QWP_range(1):out.QWP_resolution:out.QWP_range(2))); % reset to 0 !
+end
+
+out.arr_2exclude = handles.arr_2exclude;
 
 % Makes the stored data the output:
 handles.output = out;
@@ -160,3 +169,75 @@ else
     % The GUI is no longer waiting
     delete(hObject);
 end
+
+
+
+function qwp_rmv_edt_Callback(hObject, ~, handles) %#ok<*INUSD>
+% hObject    handle to qwp_rmv_edt (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of qwp_rmv_edt as text
+%        str2double(get(hObject,'String')) returns contents of qwp_rmv_edt as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function qwp_rmv_edt_CreateFcn(hObject, ~, handles)
+% hObject    handle to qwp_rmv_edt (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function hwp_rmv_edt_Callback(hObject, ~, handles)
+% hObject    handle to hwp_rmv_edt (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of hwp_rmv_edt as text
+%        str2double(get(hObject,'String')) returns contents of hwp_rmv_edt as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function hwp_rmv_edt_CreateFcn(hObject, ~, handles)
+% hObject    handle to hwp_rmv_edt (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+% --- Executes on button press in rm_angle_push.
+function rm_angle_push_Callback(hObject, ~, handles)
+% hObject    handle to rm_angle_push (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+out.HWP_range = handles.table_WP_range.Data(1,:);
+out.QWP_range = handles.table_WP_range.Data(2,:);
+out.HWP_resolution = min(handles.table_WP_resolution.Data{1,2}, abs(out.HWP_range(2)-out.HWP_range(1)));
+out.QWP_resolution = min(handles.table_WP_resolution.Data{2,2}, abs(out.QWP_range(2)-out.QWP_range(1)));
+v= [max(1, length(out.HWP_range(1):out.HWP_resolution:out.HWP_range(2))), ...
+    max(1, length(out.QWP_range(1):out.QWP_resolution:out.QWP_range(2)))];
+if sum(size(handles.arr_2exclude) ~= v)
+    handles.arr_2exclude = zeros(length(out.HWP_range(1):out.HWP_resolution:out.HWP_range(2)), ...
+    length(out.QWP_range(1):out.QWP_resolution:out.QWP_range(2))); % reset to 0 !
+end
+vect_rm_qwp = str2num(handles.qwp_rmv_edt.String); %#ok<*ST2NM> % x
+vect_rm_hwp = str2num(handles.hwp_rmv_edt.String); % y
+
+handles.arr_2exclude(vect_rm_hwp , vect_rm_qwp) = 1;
+disp(handles.arr_2exclude);
+% Update handles structure
+guidata(hObject, handles);
+

@@ -53,6 +53,7 @@ function properties_polarization_map_OpeningFcn(hObject, eventdata, handles, var
 % Choose default command line output for properties_polarization_map
 handles.output = hObject;
 
+handles.min_abs = 1e-3; % deg
 % Takes in the current values of the properties:
 prop = varargin{1};
 % Enters the serial numbers:
@@ -73,7 +74,9 @@ handles.table_WP_range.Data(2,:) = prop.QWP_range;
 handles.table_WP_resolution.Data{1,2} = prop.HWP_resolution;
 handles.table_WP_resolution.Data{2,2} = prop.QWP_resolution;
 handles.arr_2exclude = prop.arr_2exclude;
-
+table_WP_resolution_CellEditCallback(hObject, eventdata, handles);
+table_WP_range_CellEditCallback(hObject, eventdata, handles);
+time_tot_update_mp(handles);
 % Update handles structure
 guidata(hObject, handles);
 
@@ -115,13 +118,17 @@ out.meas_freq = handles.table_EM.Data{2,2};
 out.HWP_range = handles.table_WP_range.Data(1,:);
 out.QWP_range = handles.table_WP_range.Data(2,:);
 % Stores the resolution of the WPs:
-out.HWP_resolution = min(handles.table_WP_resolution.Data{1,2}, abs(out.HWP_range(2)-out.HWP_range(1)));
-out.QWP_resolution = min(handles.table_WP_resolution.Data{2,2}, abs(out.QWP_range(2)-out.QWP_range(1)));
+out.HWP_resolution = max(handles.min_abs, min(handles.table_WP_resolution.Data{1,2}, abs(out.HWP_range(2)-out.HWP_range(1))));
+out.QWP_resolution = max(handles.min_abs, min(handles.table_WP_resolution.Data{2,2}, abs(out.QWP_range(2)-out.QWP_range(1))));
 v= [max(1, length(out.HWP_range(1):out.HWP_resolution:out.HWP_range(2))), ...
     max(1, length(out.QWP_range(1):out.QWP_resolution:out.QWP_range(2)))];
 if sum(size(handles.arr_2exclude) ~= v)
     handles.arr_2exclude = zeros(length(out.HWP_range(1):out.HWP_resolution:out.HWP_range(2)), ...
     length(out.QWP_range(1):out.QWP_resolution:out.QWP_range(2))); % reset to 0 !
+end
+
+if isempty(handles.arr_2exclude)
+    handles.arr_2exclude = zeros(max(1, size(handles.arr_2exclude,1)), max(1, size(handles.arr_2exclude,2)));
 end
 
 out.arr_2exclude = handles.arr_2exclude;
@@ -241,3 +248,159 @@ disp(handles.arr_2exclude);
 % Update handles structure
 guidata(hObject, handles);
 
+
+% --- Executes when entered data in editable cell(s) in table_WP_resolution.
+function table_WP_resolution_CellEditCallback(hObject, eventdata, handles)
+% hObject    handle to table_WP_resolution (see GCBO)
+% eventdata  structure with the following fields (see MATLAB.UI.CONTROL.TABLE)
+%	Indices: row and column indices of the cell(s) edited
+%	PreviousData: previous data for the cell(s) edited
+%	EditData: string(s) entered by the user
+%	NewData: EditData or its converted form set on the Data property. Empty if Data was not changed
+%	Error: error string when failed to convert EditData to appropriate value for Data
+% handles    structure with handles and user data (see GUIDATA)
+
+if handles.table_WP_resolution.Data{1,2} < handles.min_abs
+   handles.table_WP_resolution.Data{1,2} = handles.min_abs; % otherwise it's going to be 0 size
+end
+if handles.table_WP_resolution.Data{2,2} < handles.min_abs
+   handles.table_WP_resolution.Data{2,2} = handles.min_abs; % deg % otherwise it's going to be 0 size
+end
+
+nb_polar_utilmp(handles);
+
+time_tot_update_mp(handles);
+
+function nb_hwp_ang_Callback(hObject, eventdata, handles)
+% hObject    handle to nb_hwp_ang (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of nb_hwp_ang as text
+%        str2double(get(hObject,'String')) returns contents of nb_hwp_ang as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function nb_hwp_ang_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to nb_hwp_ang (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function nb_qwp_ang_Callback(hObject, eventdata, handles)
+% hObject    handle to nb_qwp_ang (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of nb_qwp_ang as text
+%        str2double(get(hObject,'String')) returns contents of nb_qwp_ang as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function nb_qwp_ang_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to nb_qwp_ang (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+% --- Executes when entered data in editable cell(s) in table_WP_range.
+function table_WP_range_CellEditCallback(hObject, eventdata, handles)
+% hObject    handle to table_WP_range (see GCBO)
+% eventdata  structure with the following fields (see MATLAB.UI.CONTROL.TABLE)
+%	Indices: row and column indices of the cell(s) edited
+%	PreviousData: previous data for the cell(s) edited
+%	EditData: string(s) entered by the user
+%	NewData: EditData or its converted form set on the Data property. Empty if Data was not changed
+%	Error: error string when failed to convert EditData to appropriate value for Data
+% handles    structure with handles and user data (see GUIDATA)
+
+nb_polar_utilmp(handles);
+
+time_tot_update_mp(handles);
+
+function nb_polar_utilmp(handles)
+hrg = handles.table_WP_range.Data(1,:); 
+set(handles.nb_hwp_ang, 'String', num2str(floor((hrg(2)-hrg(1))/handles.table_WP_resolution.Data{1,2}+1)));
+
+qrg = handles.table_WP_range.Data(2,:); 
+set(handles.nb_qwp_ang, 'String', num2str(floor((qrg(2)-qrg(1))/handles.table_WP_resolution.Data{2,2}+1)));
+
+
+
+function timetot_min_Callback(hObject, eventdata, handles)
+% hObject    handle to timetot_min (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of timetot_min as text
+%        str2double(get(hObject,'String')) returns contents of timetot_min as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function timetot_min_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to timetot_min (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+% --- Executes when entered data in editable cell(s) in table_EM.
+function table_EM_CellEditCallback(hObject, eventdata, handles)
+% hObject    handle to table_EM (see GCBO)
+% eventdata  structure with the following fields (see MATLAB.UI.CONTROL.TABLE)
+%	Indices: row and column indices of the cell(s) edited
+%	PreviousData: previous data for the cell(s) edited
+%	EditData: string(s) entered by the user
+%	NewData: EditData or its converted form set on the Data property. Empty if Data was not changed
+%	Error: error string when failed to convert EditData to appropriate value for Data
+% handles    structure with handles and user data (see GUIDATA)
+
+time_tot_update_mp(handles);
+
+function time_tot_update_mp(handles)
+
+exptime_sec = handles.table_EM.Data{1,2}; % sec
+stpana = handles.table_LP.Data{1,2}; nb_ana = 180/stpana+1;
+move_ana_sec = stpana/30*1.75;% 30deg step takes 1.5sec
+reset_ana_sec = 1.8; % sec
+exp_pow = 0.33;
+move_hwp_sec = 1.0 + max(0, (handles.table_WP_resolution.Data{1,2})^exp_pow-10^exp_pow); % 10deg is 1 sec
+move_qwp_sec = 0.6 + max(0, (handles.table_WP_resolution.Data{1,2})^exp_pow-10^exp_pow); % 30deg is 1 sec
+% reset_hwp_sec = 1.5
+nb_hwp = str2double(get(handles.nb_hwp_ang, 'String'));
+nb_qwp = str2double(get(handles.nb_qwp_ang, 'String'));
+
+time_tot = (move_ana_sec*(nb_ana-1) + exptime_sec*nb_ana + reset_ana_sec)*nb_qwp*nb_hwp + move_hwp_sec*nb_hwp + move_qwp_sec*nb_qwp;
+set(handles.timetot_min, 'String', sprintf('%.1f', time_tot/60));
+
+
+% --- Executes when entered data in editable cell(s) in table_LP.
+function table_LP_CellEditCallback(hObject, eventdata, handles)
+% hObject    handle to table_LP (see GCBO)
+% eventdata  structure with the following fields (see MATLAB.UI.CONTROL.TABLE)
+%	Indices: row and column indices of the cell(s) edited
+%	PreviousData: previous data for the cell(s) edited
+%	EditData: string(s) entered by the user
+%	NewData: EditData or its converted form set on the Data property. Empty if Data was not changed
+%	Error: error string when failed to convert EditData to appropriate value for Data
+% handles    structure with handles and user data (see GUIDATA)
+
+time_tot_update_mp(handles);

@@ -279,10 +279,20 @@ function push_connect_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % Connects to the motors and power meter:
+instr_l = {handles.EM, handles.LP, handles.QWP, handles.HWP};     
 ins_str = {handles.EM_str, handles.LP_str, handles.QWP_str, handles.HWP_str};
 names={'EM', 'LP', 'QWP','HWP'};
 for ii=0:3
-    handles = connect_actx(handles, ins_str, names, ii);
+    handles = connect_actx(handles, ins_str, names, ii, instr_l{ii+1}, 1);
+    guidata(hObject, handles);
+end
+for ii=0:3
+    if (handles.dev_on_list(ii+1) && ii >0) % % not EM
+        home_mot_mp(ins_str{ii+1}, instr_l{ii+1}); % home simultaneously
+    end
+end
+for ii=0:3
+    handles = connect_actx(handles, ins_str, names, ii, instr_l{ii+1}, 2);
     guidata(hObject, handles);
 end
 c= sum(handles.dev_on_list);
@@ -349,7 +359,7 @@ function push_start_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % Removes all previous results:
-
+set(handles.path_disp, 'String', '');
 handles = clear_results(handles);
 
 % Sets the stop variable to false:
@@ -382,25 +392,30 @@ handles.fitted_parameters.pol_angle = zeros(k,1);
 
 % Creates a figure into which all the fittings will be plotted, so the user
 % can see the progression of the measurements:
-handles.overview_figure = figure('position',[10,50,(k*75)+75,(l*75)+75]);
+handles.overview_figure = figure(101); set(handles.overview_figure,'position',[10,50,(k*75)+75,(l*75)+75]);
 
 if k >0; vectx = 1:k; % QWP
-else; vectx = 1; k =1;
+else; vectx = 1; %k =1;
 end
 if l >0; vecty = 1:l; % QWP
-else; vecty = 1;l =1;
+else; vecty = 1; %l =1;
 end
 x=0;
+tic;
 while x < vectx(end) % QWP
      y = 0;
     x = x+1;
-    fprintf('x is at %d/%d, %d \n', x, k, handles.QWP_values(x,1));
+    fprintf('x is at %d/%d, %d \n', x, vectx(end), handles.QWP_values(x,1));
     while y < vecty(end) % % HWP
         y = y+1;
         if (sum(size(handles.arr_2exclude)==size(handles.HWP_values')) && handles.arr_2exclude(y, x)) % % line, col
+            if handles.arr_2exclude(y, x) == 1 % % if 2, just skip but don't erase existing one
+                h = subplot('Position',[x/(vectx(end)+1),(vecty(end)-y)/(vecty(end)+1),1/(vectx(end)+1),1/(vecty(end)+1)]);
+                axis('equal'); set(h,'xtick',[],'ytick',[],'box','off','xcolor','w','ycolor','w')
+            end
             continue % skip this one
         end
-        fprintf('y is at %d/%d, %d\n', y, l, handles.HWP_values(x,y));
+        fprintf('y is at %d/%d, %d\n', y, vecty(end), handles.HWP_values(x,y));
         % Rotates the QWP and HWP to specific angles:
 % %         handles.QWP.MoveAbsoluteRot(0,handles.QWP_values(x,y),0,3,1); %m
         move_rot_mp(handles.QWP_str, handles.QWP, handles.QWP_values(x,y));
@@ -428,12 +443,18 @@ while x < vectx(end) % QWP
             return;
         end
     end
+    save_util( handles, 'C:\Users\admin\Desktop\', 'res_temp.mat');
     if x == vectx(end) % the end
+        try %#ok<TRYNC>
+            toc; 
+        end 
+        guidata(hObject, handles);
         [handles, vectx, vecty, handles.arr_2exclude, flag] = add_polar_afterend_mp(handles, vectx, vecty, handles.arr_2exclude, n);
         if ~flag
             break; % outside while X
         else
             x=0; % y=0;
+            tic;
         end
     end
 end
@@ -447,6 +468,8 @@ set(handles.menu_save_single,'Enable','off');
 % Enables the posibility to view different parameters of the measured
 % polarization map:
 set(handles.popup_result,'Enable','on');
+set(handles.flip_QWP_chck,'Enable','on');
+set(handles.flip_HWP_chck,'Enable','on');
 handles = image_result(handles);
 save_util( handles, 'C:\Users\admin\Desktop\', 'res_temp.mat'); % saving just in case
 
@@ -481,11 +504,15 @@ if (add_right || add_btm)
     else
         if HWP_range(1) == handles.HWP_range(2); HWP_range(1) = HWP_range(1)+HWP_range(2); % % no rep
         end
+        if length(HWP_range) == 2; HWP_range(end+1) = HWP_range(end);
+        end
         vectHWP1 = HWP_range(1):HWP_range(2):HWP_range(3);
     end
     if length(QWP_range) == 1;  vectQWP1 = QWP_range; 
     else
         if QWP_range(1) == handles.QWP_range(2); QWP_range(1) = QWP_range(1)+QWP_range(2); % % no rep
+        end
+        if length(QWP_range) == 2; QWP_range(end+1) = QWP_range(end);
         end
         vectQWP1 = QWP_range(1):QWP_range(2):QWP_range(3);
     end
@@ -506,11 +533,15 @@ if (add_left || add_top)
     else
         if HWP_range(1) == handles.HWP_range(2); HWP_range(1) = HWP_range(1)+HWP_range(2); % % no rep
         end
+        if length(HWP_range) == 2; HWP_range(end+1) = HWP_range(end);
+        end
         vectHWP0 = HWP_range(1):HWP_range(2):HWP_range(3);
     end
     if length(QWP_range) == 1;  vectQWP0 = QWP_range; 
     else
         if QWP_range(1) == handles.QWP_range(2); QWP_range(1) = QWP_range(1)+QWP_range(2); % % no rep
+        end
+        if length(QWP_range) == 2; QWP_range(end+1) = QWP_range(end);
         end
         vectQWP0 = QWP_range(1):QWP_range(2):QWP_range(3);
     end
@@ -540,7 +571,16 @@ if (add_right || add_btm || add_left || add_top)
     pol_angle0 = handles.fitted_parameters.pol_angle ; handles.fitted_parameters.pol_angle = zeros(k,1);
     handles.fitted_parameters.pol_angle(vectx0, vecty0, :) = pol_angle0;
     
-    arr_2exclude = zeros(size( handles.HWP_values')); arr_2exclude(vecty0, vectx0) = 1;
+    arr_2exclude = zeros(size( handles.HWP_values')); arr_2exclude(vecty0, vectx0) = 2; % % 1 is esclude from beginning
+    set(handles.overview_figure,'position',[10,50,(k*75)+75,(l*75)+75]);
+    
+    if (add_left || add_top)
+        ll=get(handles.overview_figure, 'children'); % axes list
+        for kk=1:length(ll)
+            x= 1+floor((kk-1)/vecty(end)); y = mod(kk,vecty(end)) + (~mod(kk,vecty(end)))*vecty(end);
+            set(ll(kk), 'Position',[x/(vectx(end)+1), (vecty(end)-y)/(vecty(end)+1), 1/(vectx(end)+1), 1/(vecty(end)+1)]);
+        end
+    end
 else
     flag = 0;
 end
@@ -600,6 +640,16 @@ handles = find_phase_and_reflection(handles);
 % Determines the QWP and HWP angles that give linear and circular
 % polarization at the imaging plane:
 handles = solve_for_LP_and_CP(handles);
+
+if get(handles.flip_QWP_chck, 'Value')
+    [handles.table_CP.Data(1, :), handles.table_LP.Data(:, 1)] = flip_wp_mp(handles.table_CP.Data(1, :), handles.table_LP.Data(:, 1), get(handles.axes_result, 'xlim'));
+    disp('I flipped QWP');
+end
+if get(handles.flip_HWP_chck, 'Value')
+    [handles.table_CP.Data(2, :), handles.table_LP.Data(:, 2)] = flip_wp_mp(handles.table_CP.Data(2, :), handles.table_LP.Data(:, 2), ...
+get(handles.axes_result, 'ylim'));
+    disp('I flipped HWP');
+end
 
 % Plots the data:
 handles = image_result(handles);
@@ -893,10 +943,17 @@ QWP_circ = QWP_rel + QWP_diff;
 HWP_circ = (HWP_circ-90*floor(HWP_circ/90));
 QWP_circ = (QWP_circ-180*floor(QWP_circ/180));
 % Enters the results in appropriate table:
+if handles.QWP_values(1) > 180
+    QWP_circ = QWP_circ + 180; % %  mp !!!
+end
+% HWP_circ = HWP_circ + handles.HWP_values(1); % %  mp !!!
+if handles.HWP_values(1) > 180
+    HWP_circ = HWP_circ + 180; % %  mp !!!
+end
 handles.table_CP.Data = [QWP_circ;HWP_circ];
 
 % Solves theoretical model for LP light:
-WP_diff = (0:0.5:180);
+WP_diff = (0:1:180);
 QWP_rel = zeros(2,length(WP_diff));
 for i = 1:length(WP_diff)
     QWP_rel(1,i) = 0.5*atand(-tand(delta)*sind(2*WP_diff(i)));
@@ -945,9 +1002,19 @@ for i = 1:length(HWP_LP)
     angle_LP(i) = round(p(3));
 end
 % Sorts the values based on the polarization angle:
-[angle_LP,i] = sort(angle_LP);
+[angle_LP,i] = sort(angle_LP); % i = 1:length(HWP_LP)
+
+% QWP_LP(i) = QWP_LP(i) + handles.QWP_values(1); % %  mp !!!
+% HWP_LP(i) = HWP_LP(i) + handles.HWP_values(1); % %  mp !!!
+if handles.QWP_values(1) > 180
+    QWP_LP(i) = QWP_LP(i) + 180; % %  mp !!!
+end
+if handles.HWP_values(1) > 180
+    HWP_LP(i) = HWP_LP(i) + 180; % %  mp !!!
+end
+
 % Stores the linearly polarized data in the appropriate table:
-handles.table_LP.Data = [QWP_LP(i) HWP_LP(i) I_LP(i) angle_LP];
+handles.table_LP.Data = [QWP_LP(i) HWP_LP(i) I_LP(i) angle_LP]; % i = 1:length(HWP_LP)
 
 % --- Deletes all previous results:
 function [handles] = clear_results(handles)
@@ -967,6 +1034,8 @@ cla(handles.axes_result)
 set(handles.menu_save,'Enable','off');
 set(handles.push_cali,'Enable','off');
 set(handles.popup_result,'Enable','off');
+set(handles.flip_QWP_chck,'Enable','off');
+set(handles.flip_HWP_chck,'Enable','off');
 
 for ii=2:5
     try  %#ok<TRYNC>
@@ -1014,7 +1083,7 @@ end
 axes(handles.axes_result)
 x = handles.QWP_values(:,1)';
 y = handles.HWP_values(1,:);
-imagesc(x,y,r',c)
+imagesc(handles.axes_result, x, y, r', c)
 axis equal; axis tight;
 xlabel('QWP [deg]'); ylabel('HWP [deg]');
 set(gca,'XAxisLocation','top','XTick',x(1:2:end),'YTick',y(1:2:end))
@@ -1029,12 +1098,15 @@ end
 % Plots the data for circularly and linearly polarized light:
 D_CP = handles.table_CP.Data;
 D_LP = handles.table_LP.Data;
-hold on;
-plot(D_CP(1,:),D_CP(2,:),'ko', D_LP(:,1), D_LP(:,2), 'kx','linewidth',2);
-axis([-5 185 -5 95])
-set(gca,'XTick',0:20:180,'YTick',0:20:90)
+
+hold(handles.axes_result, 'on');
+plot(handles.axes_result, D_CP(1,:),D_CP(2,:),'ko', D_LP(:,1), D_LP(:,2), 'kx','linewidth',2);
+xx1 = (x(1)>180)*180;  yy1 = floor(y(1)/90)*90;
+axis([xx1-5, xx1+180+5, yy1-5, yy1+90+5]) %  mp !!!
+set(gca,'XTick',xx1:max(20,abs(x(2)-x(1))):max(xx1+180, x(end)), ...
+    'YTick',yy1:max(20,abs(y(2)-y(1))):max(yy1+90, y(end))) %  mp !!!
 legend('Circular polarization','Linear polarization');
-hold off;
+hold(handles.axes_result, 'off');
 
 % -------------------------------------------------------------------------
 % ------------------- Functions that are used for fitting -----------------
@@ -1088,7 +1160,7 @@ I = I0*((d1.^2 + d2.^2).*(cosd(alpha).^2) + ...
 % ----------- Connecting and disconnecting the activeX controls: ----------
 
 % --- Connects to the motors and power meter:
-function handles = connect_actx(handles, ins_str, names, ii)
+function handles = connect_actx(handles, ins_str, names, ii, instr, part)
 % handles    structure with handles and user data (see GUIDATA)
 % connected  boolean stating if the connection was successfull
 
@@ -1150,53 +1222,35 @@ function handles = connect_actx(handles, ins_str, names, ii)
 % % handles.QWP.StartCtrl; %m
 
 % % instrs=[handles.LP, handles.QWP, handles.HWP];
-if (isfield(handles, names{ii+1}) && ~handles.dev_on_list(ii+1))
-    disp(['checking ' ins_str{ii+1} ' ...']);
-    switch ii
-        case 1
-            instr = handles.LP;
-        case 2
-            instr = handles.QWP;
-        case 3
-            instr = handles.HWP;
-        case 0
-            instr = handles.EM;  % % will temporarily be Dev1 if 
-    end
-    try
-        [connected, handles] = stctrl_instr_mp(handles, ins_str{ii+1}, instr);
-    catch ME
-        fprintf('ERR devices %s \n', ins_str{ii+1});
-        rethrow(ME);
-    end
-    handles.dev_on_list(ii+1) = connected; % EM, LP, QWP, HWP
-    if (connected && ii >0) % % not EM
-        home_mot_mp(ins_str{ii+1}, instr); % home simultaneously
-    end
-end
-
-if handles.dev_on_list(ii+1)
-    switch ii
-        case 1
-            instr = handles.LP;
-        case 2
-            instr = handles.QWP;
-        case 3
-            instr = handles.HWP;
-    end
-    if strcmp(ins_str{ii+1},'thorlabs')
-        pause(0.5) % Gives the GUI time to update:
-    elseif (ii == 0 && isfield(handles, 'funclistNIdaq')) % % effct-meter NI
-        handles = daq_openchan_mp(handles);
-        fprintf('DAQ read is %f\n', daq_read_mp(handles.libdaq, handles.EM, handles));
-    else
-        wait_move(instr, ins_str{ii+1});
-        if strcmp(ins_str{ii+1},'newport')
-            disp(query(instr,'1TP?\r'));
-        elseif strcmp(ins_str{ii+1},'micos')
-            disp(query(instr,'1 npos ')); % get pos
+switch part
+    case 1
+        if (isfield(handles, names{ii+1}) && ~handles.dev_on_list(ii+1))
+            disp(['checking ' ins_str{ii+1} ' ...']);
+            try
+                [connected, handles] = stctrl_instr_mp(handles, ins_str{ii+1}, instr);
+            catch ME
+                fprintf('ERR devices %s \n', ins_str{ii+1});
+                rethrow(ME);
+            end
+            handles.dev_on_list(ii+1) = connected; % EM, LP, QWP, HWP
         end
-    end
-    fprintf('\n %s instr ON \n', ins_str{ii+1})
+    case 2
+        if handles.dev_on_list(ii+1)
+            if strcmp(ins_str{ii+1},'thorlabs')
+                pause(0.5) % Gives the GUI time to update:
+            elseif (ii == 0 && isfield(handles, 'funclistNIdaq')) % % effct-meter NI
+                handles = daq_openchan_mp(handles);
+                fprintf('DAQ read is %f\n', daq_read_mp(handles.libdaq, handles.EM, handles));
+            else
+                wait_move(instr, ins_str{ii+1});
+                if strcmp(ins_str{ii+1},'newport')
+                    disp(query(instr,'1TP?\r'));
+                elseif strcmp(ins_str{ii+1},'micos')
+                    disp(query(instr,'1 npos ')); % get pos
+                end
+            end
+            fprintf('\n %s instr ON \n', ins_str{ii+1})
+        end
 end
 
 % --- Disconnects the motors and power meters:
@@ -1232,23 +1286,28 @@ end
 % handles.EM.SendCommandOrQuery(0,'STATistics:ABORt'); %p
 % % Discontect the meter:
 % handles.EM.DeInitialize(); %p
-if handles.avl_list(1)
-    if (isfield(handles, 'libdaq') && ~isempty(handles.libdaq) && isa(handles.EM, 'lib.pointer')) % % 
-        err = calllib(handles.libdaq,'DAQmxClearTask',handles.EM);
-        DAQmxCheckError(handles.libdaq, err);
-        % % unload library
-        if libisloaded(handles.libdaq); unloadlibrary(handles.libdaq) % checks if library is loaded
-        end
-    else
-        fclose(handles.EM);%p
-    end
-    disp('EM discon.');
-    handles.avl_list(1) = 0;
-    handles.dev_on_list(1) = 0;
-
-end
+handles = disco_EM_mp(handles);
 
 handles.deco = 1;
+
+function handles = disco_EM_mp(handles)
+
+% if handles.avl_list(1)
+if (isfield(handles, 'libdaq') && ~isempty(handles.libdaq)) % % 
+    if isa(handles.EM, 'lib.pointer')
+        err = calllib(handles.libdaq,'DAQmxClearTask',handles.EM);
+        DAQmxCheckError(handles.libdaq, err);
+    end
+    % % unload library
+    if libisloaded(handles.libdaq); unloadlibrary(handles.libdaq) % checks if library is loaded
+    end
+else
+    fclose(handles.EM);%p
+end
+disp('EM discon.');
+handles.avl_list(1) = 0;
+handles.dev_on_list(1) = 0;
+% end
 
 function handles = daq_openchan_mp(handles)
 
@@ -1284,18 +1343,21 @@ function menu_open_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-% Clears all previous results:
-handles = clear_results(handles);
-
 % Lets the user select the matlab file that will be opened:
 [file, path] = uigetfile('*.mat','Select the MATLAB file containing the results');
 % Checks if the action is canceled:
 if file == 0
     return;
 end
+% Clears all previous results:
+handles = clear_results(handles);
 
+pp = [path file];
 % Loads the variables to the workspace:
-load([path file]); %#ok<LOAD>
+load(pp); %#ok<LOAD>
+ppp=pp(pp~= ' '); disp(pp);
+set(handles.path_disp, 'String', ppp(end-95:end-3)); %(end-49:end));
+
 try
     handles.QWP_values = measured_parameters.QWP;
     handles.HWP_values = measured_parameters.HWP;
@@ -1310,11 +1372,36 @@ try
             handles.fitted_parameters.QWP_diff = fitted_parameters.map.QWP_diff;
             handles.fitted_parameters.LP_diff = fitted_parameters.map.LP_diff;
             handles.fitted_parameters.delta = fitted_parameters.map.delta;
-            handles = solve_for_LP_and_CP(handles);
+            if get(handles.calc_res_if_open_chck, 'Value') % % calc res if just load
+                handles = solve_for_LP_and_CP(handles);
+            else
+                res = 2-menu('load .txt res ?', 'yes', 'no');
+                if res == 1 % not 2
+                    [file1, path1] = uigetfile(fullfile(path, '*.txt'),'Select the TXT of treated');
+                    cd(path1);
+                    fid=fopen(file1);
+                    tline = fgetl(fid); 
+                    ct =0; circdata = []; linpoldata = [];
+                    while ischar(tline)
+                        ct = ct+1;
+                        %     disp(tline)
+                        if (ct > 2 && ct <= 6)
+                            circdata(:, end+1 ) = cell2mat(textscan(tline, '%f %f', 'delimiter', ' ')); %#ok<AGROW>
+                        elseif ct > 8
+                            linpoldata(end+1, :) = cell2mat(textscan(tline, '%f %f %f %f', 'delimiter', ' ')); %#ok<AGROW>
+                        end
+                        tline = fgetl(fid);
+                    end
+                    handles.table_CP.Data = circdata;
+                    handles.table_LP.Data = linpoldata;
+                    fclose(fid);
+                end
+            end
         end
     end
-catch
+catch ME
     disp('Could not load the data');
+    disp(ME.message);
     return;
 end
 
@@ -1323,6 +1410,8 @@ set(handles.menu_save,'Enable','on');
 set(handles.push_cali,'Enable','on');
 % Enables the posibility to image results:
 set(handles.popup_result,'Enable','on');
+set(handles.flip_QWP_chck,'Enable','on');
+set(handles.flip_HWP_chck,'Enable','on');
 handles = image_result(handles);
 
 % Update handles structure
@@ -1373,10 +1462,16 @@ if file == 0
 end
 
 save_util( handles, path, file);
-
+flip_str = '';
+if get(handles.flip_QWP_chck, 'Value')
+    flip_str = sprintf('%s_flipQWP', flip_str);
+end
+if get(handles.flip_HWP_chck, 'Value')
+    flip_str = sprintf('%s_flipHWP', flip_str);
+end
 if ~isempty(handles.table_CP.Data) && ~isempty(handles.table_LP.Data)
     % Opens a file to write the HWP and QWP values to:
-    FID = fopen([path file(1:end-4) '.txt'],'w');
+    FID = fopen([path file(1:end-4) flip_str '.txt'],'w');
     % Stores the circular polarization settings:
     t = 'Circular polarization:\nQWP [deg] HWP [degrees]\n';
     fprintf(FID, t);
@@ -1439,17 +1534,17 @@ function menu_prop_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % Collects all the parameters that can be changed:
-if strcmp(handles.LP_str , 'thorlabs')
+if (strcmp(handles.LP_str , 'thorlabs') && isa(handles.LP, 'COM.MGMOTOR_MGMotorCtrl_1'))
     in.HWSerialNum(1,1) = handles.LP.HWSerialNum;
 else
     in.HWSerialNum(1,1) = 0;
 end
-if strcmp(handles.HWP_str , 'thorlabs')
+if (strcmp(handles.HWP_str , 'thorlabs') && isa(handles.HWP, 'COM.MGMOTOR_MGMotorCtrl_1'))
     in.HWSerialNum(2,1) = handles.HWP.HWSerialNum;
 else
     in.HWSerialNum(2,1) = 0;
 end
-if strcmp(handles.QWP_str , 'thorlabs')
+if (strcmp(handles.QWP_str , 'thorlabs') && isa(handles.QWP, 'COM.MGMOTOR_MGMotorCtrl_1'))
     in.HWSerialNum(3,1) = handles.QWP.HWSerialNum;
 else
     in.HWSerialNum(3,1) = 0;
@@ -1472,13 +1567,13 @@ if isempty(out)
 end
 
 % Stores all the data that could be changed:
-if strcmp(handles.LP_str , 'thorlabs')
+if (strcmp(handles.LP_str , 'thorlabs') && isa(handles.LP, 'COM.MGMOTOR_MGMotorCtrl_1'))
     handles.LP.HWSerialNum = out.HWSerialNum(1);
 end
-if strcmp(handles.HWP_str , 'thorlabs')
+if (strcmp(handles.HWP_str , 'thorlabs') && isa(handles.HWP, 'COM.MGMOTOR_MGMotorCtrl_1'))
     handles.HWP.HWSerialNum = out.HWSerialNum(2);
 end
-if strcmp(handles.QWP_str , 'thorlabs')
+if (strcmp(handles.QWP_str , 'thorlabs') && isa(handles.QWP, 'COM.MGMOTOR_MGMotorCtrl_1'))
     handles.QWP.HWSerialNum = out.HWSerialNum(3);
 end
 handles.LP_stepsize = out.LP_stepsize;
@@ -1491,7 +1586,7 @@ handles.HWP_range = out.HWP_range;
 handles.QWP_range = out.QWP_range;
 handles.arr_2exclude = out.arr_2exclude;
 disp('in main');
-disp(cat(2, [0; (handles.HWP_range(1):handles.HWP_resolution:handles.HWP_range(2))'], ...
+disp(cat(2, [NaN; (handles.HWP_range(1):handles.HWP_resolution:handles.HWP_range(2))'], ...
 cat(1, (handles.QWP_range(1):handles.QWP_resolution:handles.QWP_range(2)), handles.arr_2exclude))); 
 
 % Update handles structure
@@ -1666,6 +1761,7 @@ if (~libisloaded(lib)) % %  || ~isfield(handles, 'funclistNIdaq'))
     disp('Matlab: Load nicaiu.dll ...')
     setenv('MW_MINGW64_LOC','C:\mingw-w64\x86_64-5.3.0-posix-seh-rt_v4-rev0\mingw64'); % !!
     path_NI = 'C:\Program Files (x86)\National Instruments\NI-DAQ\DAQmx ANSI C Dev\include';
+    warning('off','MATLAB:loadlibrary:TypeNotFound')
     try
         handles.funclistNIdaq = loadlibrary(fullfile('C:\Windows\System32', 'nicaiu.dll'),fullfile(path_NI, 'nidaqmx.h'),'alias',lib);
         disp('... Matlab: NI dll loaded');
@@ -1676,6 +1772,7 @@ if (~libisloaded(lib)) % %  || ~isfield(handles, 'funclistNIdaq'))
         else; rethrow(ME); 
         end
     end
+    warning('on','MATLAB:loadlibrary:TypeNotFound')
     %if you do NOT have nicaiu.dll and nidaqmx.h
     %in your Matlab path,add full pathnames or copy the files.
     %libfunctions(lib,'-full') % use this to show the... 
@@ -1726,12 +1823,16 @@ function close_com_mp(str_mot, mot_obj, dev_on)
             fclose(mot_obj);
         case 'newport' % ESP100
             if dev_on 
-                fprintf(mot_obj, '1MF'); % off motor
-                pause(0.5);
+                try fprintf(mot_obj, '1MF'); % off motor
+                    pause(0.5);
+                catch ME; fprintf(2, ME.message);
+                end
             end
             fclose(mot_obj);
         case 'thorlabs' % Z rot
-            mot_obj.StopCtrl;
+            try mot_obj.StopCtrl;
+            catch ME; fprintf(2, ME.message);
+            end
         case 'tl_pm' % power meter
            
     end
@@ -1753,6 +1854,7 @@ if strcmp(strcell{ind}(1:end-1), 'Dev')
 elseif length(strcell{ind})> 3 % com smthg
     reinit_com_mp(strcell{ind})
 end
+handles.dev_on_list(ind) = 0;
 
 % --- Executes on selection change in list_com.
 function list_com_Callback(hObject, eventdata, handles)
@@ -1986,7 +2088,7 @@ function reopen_activeX_push_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 if isempty(findobj('type','figure','name','Activex'))
-    handles.actx_figure = figure('Name', 'ActiveX');
+    handles.actx_figure = figure(1); set(handles.actx_figure, 'Name', 'ActiveX');
     ct = 0;
     for k =1:length(handles.sn_list)
         ct = ct+1;
@@ -2024,7 +2126,7 @@ while 1 % infinite
     kk = kk+1;
     [file, path] = uigetfile('*.mat', sprintf('Select the MATLAB file containing the results #%d (cancel to quit)', kk));
     % Checks if the action is canceled:
-    if file == 0; return; end
+    if file == 0; break; end
     % Loads the variables to the workspace:
     load([path file]); %#ok<LOAD>
     answer = menu('dir to add to actual', 'right (after)', 'bottom(after)', 'left(before)', 'top(before)');
@@ -2034,4 +2136,76 @@ while 1 % infinite
     elseif answer == 4; axis = -2;
     end
     handles = combine_results(handles, measured_parameters, fitted_parameters, axis);
+    [handles] = image_result(handles);
 end
+
+guidata(hObject, handles);
+
+
+% --- Executes on button press in flip_QWP_chck.
+function flip_QWP_chck_Callback(hObject, eventdata, handles)
+% hObject    handle to flip_QWP_chck (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of flip_QWP_chck
+
+D_CP = handles.table_CP.Data; 
+D_LP = handles.table_LP.Data;
+% flip = get(hObject,'Value');
+% % if flip  
+% % end
+[handles.table_CP.Data(1, :), handles.table_LP.Data(:, 1)] = flip_wp_mp(D_CP(1, :), D_LP(:, 1), get(handles.axes_result, 'xlim'));
+
+popup_result_Callback(handles.popup_result, eventdata, handles);
+disp('I flipped QWP');
+
+function [v_CP, v_LP] = flip_wp_mp(v_CP, v_LP, lim)
+
+v_CP = lim(2) - v_CP + lim(1);
+v_LP = lim(2) - v_LP + lim(1);
+
+% --- Executes on button press in flip_HWP_chck.
+function flip_HWP_chck_Callback(hObject, eventdata, handles)
+% hObject    handle to flip_HWP_chck (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of flip_HWP_chck
+
+[handles.table_CP.Data(2, :), handles.table_LP.Data(:, 2)] = flip_wp_mp(handles.table_CP.Data(2, :), handles.table_LP.Data(:, 2), ...
+get(handles.axes_result, 'ylim'));
+popup_result_Callback(handles.popup_result, eventdata, handles);
+disp('I flipped HWP');
+
+
+% --- Executes on button press in calc_res_if_open_chck.
+function calc_res_if_open_chck_Callback(hObject, eventdata, handles)
+% hObject    handle to calc_res_if_open_chck (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of calc_res_if_open_chck
+
+
+% --- Executes on button press in disc_EM_push.
+function disc_EM_push_Callback(hObject, eventdata, handles)
+% hObject    handle to disc_EM_push (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+% disp(get(handles.disc_EM_push, 'String'))
+if strcmp(get(handles.disc_EM_push, 'String'), 'disc EM')
+    handles = disco_EM_mp(handles);
+    set(handles.disc_EM_push, 'String', 'conn. EM');
+    set(handles.push_single, 'Enable', 'off');
+    set(handles.push_start,  'Enable', 'off');
+else % conn
+    handles = connect_actx(handles, {handles.EM_str}, {'EM'}, 0, handles.EM, 1);
+    handles = connect_actx(handles, {handles.EM_str}, {'EM'}, 0, handles.EM, 2);
+    set(handles.disc_EM_push, 'String', 'disc EM');
+    if sum(handles.dev_on_list) >= 4
+        set(handles.push_single, 'Enable', 'on');
+        set(handles.push_start,  'Enable', 'on');
+    end
+end
+guidata(hObject, handles);

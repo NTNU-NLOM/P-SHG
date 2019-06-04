@@ -23,7 +23,7 @@ maxime.pinsard@outlook.com
 ------
 
 The matlab code to run an automated polarization-resolved second harmonic generation (P-SHG) setup designed for a commercial microscope.
-For more details on application and implementation see "Automated calibration and control for polarization resolved second harmonic generation on commercial microscopes" (in preparation).
+For more details on application and implementation see "Romijn, Elisabeth Inge; Finnøy, Andreas; Kumar, Rajesh; Lilledahl, Magnus Borstad. (2018) Automated calibration and control for polarization-resolved second harmonic generation on commercial microscopes. PLoS ONE. vol. 13 (4)".
 
 Two graphical user interfaces (GUIs) were created; one to run the calibration of the P-SHG setup ("polarization_calibration"), and the other to enable P-SHG imaging ("polarization_imaging"). (The GUI "properties_polarization_calibration" is called upon by "polarization_calibration".)
 

@@ -133,6 +133,9 @@ end
 
 out.arr_2exclude = handles.arr_2exclude;
 
+out.no_use_hwp = get(handles.no_use_hwp_chck, 'Value');
+out.no_use_qwp = get(handles.no_use_qwp_chck, 'Value');
+
 % Makes the stored data the output:
 handles.output = out;
 
@@ -404,3 +407,21 @@ function table_LP_CellEditCallback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 time_tot_update_mp(handles);
+
+
+% --- Executes on button press in no_use_hwp_chck.
+function no_use_hwp_chck_Callback(hObject, eventdata, handles)
+% hObject    handle to no_use_hwp_chck (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of no_use_hwp_chck
+
+
+% --- Executes on button press in no_use_qwp_chck.
+function no_use_qwp_chck_Callback(hObject, eventdata, handles)
+% hObject    handle to no_use_qwp_chck (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of no_use_qwp_chck

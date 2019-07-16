@@ -133,6 +133,8 @@ for com={com_str_EM, com_str_LP, com_str_qwp, com_str_hwp}
 end
 
 handles.arr_2exclude = 0;
+handles.no_use_hwp = 0;
+handles.no_use_qwp = 0;
 
 handles.timeout_read_EM = 1; % sec
 handles.timeout_read_LP = 1;
@@ -291,7 +293,7 @@ for ii=0:3
         home_mot_mp(ins_str{ii+1}, instr_l{ii+1}); % home simultaneously
     end
 end
-for ii=0:3
+for ii=0:3 % % continued
     handles = connect_actx(handles, ins_str, names, ii, instr_l{ii+1}, 2);
     guidata(hObject, handles);
 end
@@ -381,6 +383,7 @@ end
 [k,l] = size(handles.QWP_values);
 % Creates a matrix that will contain all the analyzer and intensity
 % measurements:
+
 handles.LP_values = 0:handles.LP_stepsize:180;
 n = length(handles.LP_values);
 handles.intensity_measurements = zeros(k,l,n);
@@ -418,8 +421,18 @@ while x < vectx(end) % QWP
         fprintf('y is at %d/%d, %d\n', y, vecty(end), handles.HWP_values(x,y));
         % Rotates the QWP and HWP to specific angles:
 % %         handles.QWP.MoveAbsoluteRot(0,handles.QWP_values(x,y),0,3,1); %m
-        move_rot_mp(handles.QWP_str, handles.QWP, handles.QWP_values(x,y));
-        move_rot_mp(handles.HWP_str, handles.HWP, handles.HWP_values(x,y));
+        if ~handles.no_use_qwp
+            move_rot_mp(handles.QWP_str, handles.QWP, handles.QWP_values(x,y), 0);    
+        end
+        if ~handles.no_use_hwp
+            move_rot_mp(handles.HWP_str, handles.HWP, handles.HWP_values(x,y), 0);
+        end
+        if ~handles.no_use_qwp
+            wait_move(handles.QWP, handles.QWP_str);
+        end
+        if ~handles.no_use_hwp
+            wait_move(handles.HWP, handles.HWP_str);
+        end
 % %         handles.HWP.MoveAbsoluteRot(0,handles.HWP_values(x,y),0,3,1); %m
         
         % Measures the polarization:
@@ -436,6 +449,7 @@ while x < vectx(end) % QWP
         guidata(hObject, handles);
 
         if getappdata(0,'stop')
+            try, toc; end %#ok<NOCOM,TRYNC>
             % Update handles structure
             fprintf(2, 'stop detected inside calib : end.\n');
             % Ends the calibration:
@@ -492,8 +506,8 @@ add_right = str2double(answer{1}); add_btm = str2double(answer{2});
 add_left = str2double(answer{3}); add_top = str2double(answer{4});
 if (add_right || add_btm)
     answer = inputdlg({'vectQWP[stR:stpR:endR]', 'vectHWP[stB:stpB:endB]'}, 'RIGHT and BOTTOM', 1,...
-        {sprintf('[%d:%d:%d]', handles.QWP_range(2)+handles.QWP_resolution, handles.QWP_resolution,handles.QWP_range(2)+handles.QWP_resolution),...
-        sprintf('[%d:%d:%d]', handles.HWP_range(2)+handles.QWP_resolution, handles.HWP_resolution,handles.HWP_range(2)+handles.QWP_resolution)});
+        {sprintf('[%.1f:%.1f:%.1f]', handles.QWP_range(2)+handles.QWP_resolution, handles.QWP_resolution,handles.QWP_range(2)+handles.QWP_resolution),...
+        sprintf('[%.1f:%.1f:%.1f]', handles.HWP_range(2)+handles.HWP_resolution, handles.HWP_resolution,handles.HWP_range(2)+handles.HWP_resolution)});
     QWP_range = str2num(answer{1});  %#ok<ST2NM>
     HWP_range = str2num(answer{2});  %#ok<ST2NM>
     % % str2double gives NaN !!
@@ -501,28 +515,34 @@ if (add_right || add_btm)
     %             QWP_range(1):QWP_range(2):QWP_range(3),...
     %             HWP_range(1):HWP_range(2):HWP_range(3));
     if length(HWP_range) == 1; vectHWP1 = HWP_range;
+    elseif  isempty(HWP_range); vectHWP1 = handles.HWP_range(2);
     else
-        if HWP_range(1) == handles.HWP_range(2); HWP_range(1) = HWP_range(1)+HWP_range(2); % % no rep
+        stp = HWP_range(2)-HWP_range(1);
+        if HWP_range(1) == handles.HWP_range(2); HWP_range = HWP_range+stp; % % no rep
+            HWP_range =  HWP_range(1:end-1);
         end
-        if length(HWP_range) == 2; HWP_range(end+1) = HWP_range(end);
-        end
-        vectHWP1 = HWP_range(1):HWP_range(2):HWP_range(3);
+%         if length(HWP_range) == 2; HWP_range(end+1) = HWP_range(end);
+%         end
+        vectHWP1 = HWP_range; % (1):HWP_range(2):HWP_range(3)
     end
     if length(QWP_range) == 1;  vectQWP1 = QWP_range; 
+    elseif  isempty(QWP_range); vectQWP1 = handles.QWP_range(2); 
     else
-        if QWP_range(1) == handles.QWP_range(2); QWP_range(1) = QWP_range(1)+QWP_range(2); % % no rep
+        stp = QWP_range(2)-QWP_range(1);
+        if QWP_range(1) == handles.QWP_range(2); QWP_range = QWP_range+stp; % % no rep
+            QWP_range =  QWP_range(1:end-1);
         end
-        if length(QWP_range) == 2; QWP_range(end+1) = QWP_range(end);
-        end
-        vectQWP1 = QWP_range(1):QWP_range(2):QWP_range(3);
+%         if length(QWP_range) == 2; QWP_range(end+1) = QWP_range(end);
+%         end
+        vectQWP1 = QWP_range; %(1):QWP_range(2):QWP_range(3);
     end
     
 else; vectQWP1 = [];  vectHWP1 = [];
 end
 if (add_left || add_top)
     answer = inputdlg({'vectQWP[stL:stpL:endL]', 'vectHWP[stT:stpT:endT]'}, 'LEFT and TOP', 1,...
-        {sprintf('[%d:%d:%d]', handles.QWP_range(2)-handles.QWP_resolution, handles.QWP_resolution, handles.QWP_range(2)-handles.QWP_resolution),...
-        sprintf('[%d:%d:%d]', handles.HWP_range(2)-handles.HWP_resolution, handles.HWP_resolution, handles.HWP_range(2)-handles.HWP_resolution)});
+        {sprintf('[%.1f:%.1f:%.1f]', handles.QWP_range(2)-handles.QWP_resolution, handles.QWP_resolution, handles.QWP_range(2)-handles.QWP_resolution),...
+        sprintf('[%.1f:%.1f:%.1f]', handles.HWP_range(2)-handles.HWP_resolution, handles.HWP_resolution, handles.HWP_range(2)-handles.HWP_resolution)});
     QWP_range = str2num(answer{1});  %#ok<ST2NM>
     HWP_range = str2num(answer{2});  %#ok<ST2NM>
     % % str2double gives NaN !!
@@ -530,20 +550,26 @@ if (add_left || add_top)
     %             QWP_range(1):QWP_range(2):QWP_range(3),...
     %             HWP_range(1):HWP_range(2):HWP_range(3));
     if length(HWP_range) == 1; vectHWP0 = HWP_range;
+    elseif  isempty(HWP_range); vectHWP0 = handles.HWP_range(1); 
     else
-        if HWP_range(1) == handles.HWP_range(2); HWP_range(1) = HWP_range(1)+HWP_range(2); % % no rep
+        stp = HWP_range(2)-HWP_range(1);
+        if HWP_range(1) == handles.HWP_range(2); HWP_range = HWP_range+stp; % % no rep
+            HWP_range =  HWP_range(1:end-1);
         end
-        if length(HWP_range) == 2; HWP_range(end+1) = HWP_range(end);
-        end
-        vectHWP0 = HWP_range(1):HWP_range(2):HWP_range(3);
+%         if length(HWP_range) == 2; HWP_range(end+1) = HWP_range(end);
+%         end
+        vectHWP0 = HWP_range; %(1):HWP_range(2):HWP_range(3);
     end
-    if length(QWP_range) == 1;  vectQWP0 = QWP_range; 
+    if length(QWP_range) == 1;  vectQWP0 = QWP_range;
+    elseif  isempty(QWP_range); vectQWP0 = handles.QWP_range(1); 
     else
-        if QWP_range(1) == handles.QWP_range(2); QWP_range(1) = QWP_range(1)+QWP_range(2); % % no rep
+        stp = QWP_range(2)-QWP_range(1);
+        if QWP_range(1) == handles.QWP_range(2); QWP_range = QWP_range+stp; % % no rep
+            QWP_range =  QWP_range(1:end-1);
         end
-        if length(QWP_range) == 2; QWP_range(end+1) = QWP_range(end);
-        end
-        vectQWP0 = QWP_range(1):QWP_range(2):QWP_range(3);
+%         if length(QWP_range) == 2; QWP_range(end+1) = QWP_range(end);
+%         end
+        vectQWP0 = QWP_range; %(1):QWP_range(2):QWP_range(3);
     end
 else;  vectQWP0 = []; vectHWP0 = [];
 end
@@ -564,11 +590,11 @@ if (add_right || add_btm || add_left || add_top)
     handles.intensity_measurements(vectx0, vecty0, :) =int0;
     % The fitted parameters from the ellipticity analysis will be stored in
     % these parameters:
-    E_max0 = handles.fitted_parameters.E_max ; handles.fitted_parameters.E_max = zeros(k,1);
+    E_max0 = handles.fitted_parameters.E_max ; handles.fitted_parameters.E_max = zeros(k,l);
     handles.fitted_parameters.E_max(vectx0, vecty0, :) = E_max0;
-    E_min0 = handles.fitted_parameters.E_min ; handles.fitted_parameters.E_min = zeros(k,1);
+    E_min0 = handles.fitted_parameters.E_min ; handles.fitted_parameters.E_min = zeros(k,l);
     handles.fitted_parameters.E_min(vectx0, vecty0, :) = E_min0;
-    pol_angle0 = handles.fitted_parameters.pol_angle ; handles.fitted_parameters.pol_angle = zeros(k,1);
+    pol_angle0 = handles.fitted_parameters.pol_angle ; handles.fitted_parameters.pol_angle = zeros(k,l);
     handles.fitted_parameters.pol_angle(vectx0, vecty0, :) = pol_angle0;
     
     arr_2exclude = zeros(size( handles.HWP_values')); arr_2exclude(vecty0, vectx0) = 2; % % 1 is esclude from beginning
@@ -581,6 +607,7 @@ if (add_right || add_btm || add_left || add_top)
             set(ll(kk), 'Position',[x/(vectx(end)+1), (vecty(end)-y)/(vecty(end)+1), 1/(vectx(end)+1), 1/(vecty(end)+1)]);
         end
     end
+    % % subplots will be added later
 else
     flag = 0;
 end
@@ -604,11 +631,22 @@ function push_single_Callback(hObject, eventdata, handles)
 % Retrieves the HWP and QWP angle for the polarization measurement:
 d = handles.table_single_settings.Data;
 QWP = d(1); HWP = d(2);
+fprintf('\nQWP %d HWP %d\n\n',QWP, HWP);
 % Rotates the QWP and HWP to specific angles:
 % % handles.QWP.MoveAbsoluteRot(0,QWP,0,3,1); %m
 % % handles.HWP.MoveAbsoluteRot(0,HWP,0,3,1); %m
-move_rot_mp(handles.QWP_str, handles.QWP, QWP);
-move_rot_mp(handles.HWP_str, handles.HWP, HWP);
+if ~handles.no_use_qwp
+    move_rot_mp(handles.QWP_str, handles.QWP, QWP, 0);
+end
+if ~handles.no_use_hwp
+    move_rot_mp(handles.HWP_str, handles.HWP, HWP, 0);
+end
+if ~handles.no_use_qwp
+    wait_move(handles.QWP, handles.QWP_str);
+end
+if  ~handles.no_use_hwp
+    wait_move(handles.HWP, handles.HWP_str);
+end
 % The analyzer angles:
 handles.LP_values = 0:handles.LP_stepsize:180;
 % Does the intensity measurement:
@@ -717,7 +755,7 @@ t = sum(handles.meas_time.*[3600 60 1]);
 for i = 1:length(LP)
     % Moves the analyzer to the correct angle:
 %     handles.LP.MoveAbsoluteRot(0,LP(i),0,3,1); %m
-    move_rot_mp(handles.LP_str, handles.LP, LP(i))
+    move_rot_mp(handles.LP_str, handles.LP, LP(i), 1)
     % Asks the power meter to take a measurement:
 % %     handles.EM.SendCommandOrQuery(0,'CONFigure:STATistics:STARt'); 
     % Wait for the power meter to finish:
@@ -1295,8 +1333,7 @@ function handles = disco_EM_mp(handles)
 % if handles.avl_list(1)
 if (isfield(handles, 'libdaq') && ~isempty(handles.libdaq)) % % 
     if isa(handles.EM, 'lib.pointer')
-        err = calllib(handles.libdaq,'DAQmxClearTask',handles.EM);
-        DAQmxCheckError(handles.libdaq, err);
+        try err = calllib(handles.libdaq,'DAQmxClearTask',handles.EM); DAQmxCheckError(handles.libdaq, err); end %#ok<TRYNC>
     end
     % % unload library
     if libisloaded(handles.libdaq); unloadlibrary(handles.libdaq) % checks if library is loaded
@@ -1345,6 +1382,7 @@ function menu_open_Callback(hObject, eventdata, handles)
 
 % Lets the user select the matlab file that will be opened:
 [file, path] = uigetfile('*.mat','Select the MATLAB file containing the results');
+cd(path);
 % Checks if the action is canceled:
 if file == 0
     return;
@@ -1356,7 +1394,7 @@ pp = [path file];
 % Loads the variables to the workspace:
 load(pp); %#ok<LOAD>
 ppp=pp(pp~= ' '); disp(pp);
-set(handles.path_disp, 'String', ppp(end-95:end-3)); %(end-49:end));
+set(handles.path_disp, 'String', ppp(max(1, end-95):end-3)); %(end-49:end));
 
 try
     handles.QWP_values = measured_parameters.QWP;
@@ -1585,6 +1623,8 @@ handles.QWP_resolution = out.QWP_resolution;
 handles.HWP_range = out.HWP_range;
 handles.QWP_range = out.QWP_range;
 handles.arr_2exclude = out.arr_2exclude;
+handles.no_use_hwp = out.no_use_hwp;
+handles.no_use_qwp = out.no_use_qwp;
 disp('in main');
 disp(cat(2, [NaN; (handles.HWP_range(1):handles.HWP_resolution:handles.HWP_range(2))'], ...
 cat(1, (handles.QWP_range(1):handles.QWP_resolution:handles.QWP_range(2)), handles.arr_2exclude))); 
@@ -1619,19 +1659,23 @@ end
 delete(hObject);
 
 
-function move_rot_mp(str_mot, mot_obj, mot_value)
+function move_rot_mp(str_mot, mot_obj, mot_value, wait)
 % 2018.8 Maxime Pinsard
-% to move the rotation stage depending on their neture
+% to move the rotation stage depending on their nature
 
 % disp(ok)
 
     switch str_mot
         case 'micos' % DT80
             fprintf(mot_obj,'%f 1 nm ', mot_value);
-            wait_move(mot_obj, str_mot);
+            if wait
+                wait_move(mot_obj, str_mot);
+            end
         case 'newport' % ESP100
             fprintf(mot_obj, '1PA%d\r', mot_value); % move to
-            wait_move(mot_obj, str_mot);
+            if wait
+                wait_move(mot_obj, str_mot);
+            end
         case 'thorlabs' % Z rot
             mot_obj.MoveAbsoluteRot(0, mot_value,0,3,1); 
     end
@@ -1663,7 +1707,7 @@ function home_mot_mp(str_mot, mot_obj)
             fprintf(mot_obj, '1OR'); % no \r
             
         case 'thorlabs' % Z rot
-            if mot_obj.GetPosition_Position(0)>0 %m
+            if mot_obj.GetPosition_Position(0)==0 %m % suspicious
                 mot_obj.MoveHome(0,1);
             end
     end
@@ -1682,6 +1726,8 @@ function wait_move(mot_obj, id)
                 if (~isempty(a) && ~str2double(a)) % 1 if it is moving
                     break
                 end
+            case 'thorlabs'
+                break
         end
         pause(0.3)
         ct = ct+1;
@@ -2203,9 +2249,19 @@ else % conn
     handles = connect_actx(handles, {handles.EM_str}, {'EM'}, 0, handles.EM, 1);
     handles = connect_actx(handles, {handles.EM_str}, {'EM'}, 0, handles.EM, 2);
     set(handles.disc_EM_push, 'String', 'disc EM');
-    if sum(handles.dev_on_list) >= 4
+    if sum(handles.dev_on_list) >= (4-handles.no_use_hwp-handles.no_use_qwp)
         set(handles.push_single, 'Enable', 'on');
         set(handles.push_start,  'Enable', 'on');
     end
 end
 guidata(hObject, handles);
+
+
+% --- Executes on button press in lut_push.
+function lut_push_Callback(hObject, eventdata, handles)
+% hObject    handle to lut_push (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+imcontrast(handles.axes_result)
+

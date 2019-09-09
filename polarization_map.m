@@ -143,6 +143,8 @@ handles.tag_str_EM = 'thorpm_1';
 handles.tag_str_LP = 'anal';
 handles.tag_str_QWP = 'qwp';
 
+handles.table_single_settings.Data = [0,0,0];
+
 handles.name_dev_list = {handles.EM_str, handles.QWP_str, handles.LP_str}; % both list should match
 handles.baud_rate_list = {115200, 19200, 19200}; % both list should match
 
@@ -179,6 +181,8 @@ handles.actx_figure = figure('Name', 'ActiveX');
 if handles.avl_list(1)% [com_str_EM, com_str_LP, com_str_qwp, com_str_hwp]
     handles.EM = open_com_mp(com_str_EM, handles.baud_rate_EM, handles.tag_str_EM, handles.timeout_read_EM, 0 );
     disp('EM instr here')
+else
+    handles.EM = 0; fprintf(2, 'EM NOT here!!\n');
 end
 
 % % MP !!!!!
@@ -197,7 +201,8 @@ else
    if handles.avl_list(2)% [com_str_EM, com_str_LP, com_str_qwp, com_str_hwp]
         handles.LP = open_com_mp(com_str_LP, handles.baud_rate_LP, handles.tag_str_LP, handles.timeout_read_LP, 1);
        disp('LP instr here')
-
+   else
+        handles.LP = 0; fprintf(2, 'LP NOT here!!\n');
    end
 % motor1ID=fscanf(handles.LP,'%s');
 % set(handles.motor1Field,'String',motor1ID);
@@ -212,6 +217,7 @@ end
 % % %     set(handles.comPortsPopupMenu,'String',s_port);   % Writes in a popupmenu the s_port elements
 % end
 %read and display motorIDs
+try_anyway = 1;
 if strcmp(handles.QWP_str , 'thorlabs')
     % % Bottom right is the QWP:
     handles.sn_list{end+1} = 83845971; %!
@@ -221,10 +227,10 @@ if strcmp(handles.QWP_str , 'thorlabs')
     handles.avl_list(3) = 1;
 else
     handles.sn_list{end+1} = 0;
-    if handles.avl_list(3)% [com_str_EM, com_str_LP, com_str_qwp, com_str_hwp]
-        handles.QWP = open_com_mp(com_str_qwp, handles.baud_rate_QWP, handles.tag_str_QWP, handles.timeout_read_QWP, 1);
+    if (handles.avl_list(3) || try_anyway) % [com_str_EM, com_str_LP, com_str_qwp, com_str_hwp]
+        
+       handles.QWP = open_com_mp(com_str_qwp, handles.baud_rate_QWP, handles.tag_str_QWP, handles.timeout_read_QWP, 1);
        disp('QWP instr here')
-
     end
 end
 
@@ -281,19 +287,42 @@ function push_connect_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % Connects to the motors and power meter:
-instr_l = {handles.EM, handles.LP, handles.QWP, handles.HWP};     
-ins_str = {handles.EM_str, handles.LP_str, handles.QWP_str, handles.HWP_str};
-names={'EM', 'LP', 'QWP','HWP'};
-for ii=0:3
+instr_l = {};ins_str ={};
+if ~isa(handles.EM, 'double'); instr_l{end+1} = handles.EM; ins_str{end+1} = handles.EM_str; end% if it's a double, not here
+if ~isa(handles.LP, 'double'); instr_l{end+1} = handles.LP; ins_str{end+1} = handles.LP_str; end% if it's a double, not here
+names={'EM', 'LP'}; %, 'QWP','HWP'};
+if (~handles.no_use_qwp && isfield(handles, 'QWP') ) % use qwp
+    instr_l{end+1} = handles.QWP;
+    ins_str{end+1}=handles.QWP_str;
+    names{end+1}='QWP';
+end
+str_miss = '';
+if ~isfield(handles, 'QWP') 
+    str_miss = 'QWP';
+    handles.no_use_qwp = 1;
+end
+if (~handles.no_use_hwp && isfield(handles, 'HWP') ) % use hwp
+    instr_l{end+1} = handles.HWP;
+    ins_str{end+1}=handles.HWP_str;
+    names{end+1}='HWP';
+end
+if ~isfield(handles, 'HWP') 
+    str_miss = [str_miss, ', HWP'];
+    handles.no_use_hwp = 1;
+end
+if ~isempty(str_miss)
+    fprintf(2, '%s not used (not here)\n', str_miss);
+end
+for ii=0:(length(instr_l)-1)
     handles = connect_actx(handles, ins_str, names, ii, instr_l{ii+1}, 1);
     guidata(hObject, handles);
 end
-for ii=0:3
+for ii=0:(length(instr_l)-1) % % EM, LP, QWP, HWP
     if (handles.dev_on_list(ii+1) && ii >0) % % not EM
         home_mot_mp(ins_str{ii+1}, instr_l{ii+1}); % home simultaneously
     end
 end
-for ii=0:3 % % continued
+for ii=0:(length(instr_l)-1) % % continued
     handles = connect_actx(handles, ins_str, names, ii, instr_l{ii+1}, 2);
     guidata(hObject, handles);
 end
@@ -369,13 +398,28 @@ setappdata(0 , 'stop', 0);
 
 % Creates a HWP and QWP matrix containing all combinations of QWP and HWP 
 % angles:
+strdisp = '';
 vectQWP = handles.QWP_range(1):handles.QWP_resolution:handles.QWP_range(2);
 if isempty(vectQWP)
     vectQWP = handles.QWP_range(1); handles.QWP_resolution =10;
+elseif (length(vectQWP) > 1 && ~handles.no_use_qwp && ~isfield(handles, 'QWP')) % use QWP, but no QWP
+    strdisp = 'QWP';
 end
 vectHWP = handles.HWP_range(1):handles.HWP_resolution:handles.HWP_range(2);
 if isempty(vectHWP)
     vectHWP = handles.HWP_range(1); handles.HWP_resolution =10;
+elseif (length(vectHWP) > 1 && ~handles.no_use_hwp && ~isfield(handles, 'HWP')) % use HWP, but no HWP
+    strdisp = sprintf('%s+HWP', strdisp);
+end
+if ~isempty(strdisp)
+    choice = questdlg(sprintf('no %s, but wanted:continue?',strdisp), 'no waveplate', ...
+        'Yes','No!','No!');
+    switch choice
+        case 'Yes'
+            warning('some WP won`t move');
+        case 'No!'
+            return;
+    end
 end
 [handles.QWP_values, handles.HWP_values] = ndgrid(...
     vectQWP,...
@@ -384,7 +428,7 @@ end
 % Creates a matrix that will contain all the analyzer and intensity
 % measurements:
 
-handles.LP_values = 0:handles.LP_stepsize:180;
+handles.LP_values = handles.LP_range(1):handles.LP_stepsize:handles.LP_range(2);
 n = length(handles.LP_values);
 handles.intensity_measurements = zeros(k,l,n);
 % The fitted parameters from the ellipticity analysis will be stored in
@@ -635,20 +679,20 @@ fprintf('\nQWP %d HWP %d\n\n',QWP, HWP);
 % Rotates the QWP and HWP to specific angles:
 % % handles.QWP.MoveAbsoluteRot(0,QWP,0,3,1); %m
 % % handles.HWP.MoveAbsoluteRot(0,HWP,0,3,1); %m
-if ~handles.no_use_qwp
+if (~handles.no_use_qwp && isfield(handles, 'QWP'))
     move_rot_mp(handles.QWP_str, handles.QWP, QWP, 0);
 end
-if ~handles.no_use_hwp
+if (~handles.no_use_hwp && isfield(handles, 'HWP'))
     move_rot_mp(handles.HWP_str, handles.HWP, HWP, 0);
 end
-if ~handles.no_use_qwp
+if (~handles.no_use_qwp && isfield(handles, 'QWP'))
     wait_move(handles.QWP, handles.QWP_str);
 end
-if  ~handles.no_use_hwp
+if (~handles.no_use_hwp && isfield(handles, 'HWP'))
     wait_move(handles.HWP, handles.HWP_str);
 end
 % The analyzer angles:
-handles.LP_values = 0:handles.LP_stepsize:180;
+handles.LP_values = handles.LP_range(1):handles.LP_stepsize:handles.LP_range(2);
 % Does the intensity measurement:
 [handles, I] = ellipticity_analyzer(handles);
 
@@ -734,11 +778,13 @@ LP = handles.LP_values;
 % % start_pos = handles.LP.GetPosition_Position(0); %m
 start_pos = get_pos_mp(handles.LP_str, handles.LP);
 % For a linear polarizer 180 degrees = 0 degrees:
-if start_pos >= 180
+if (handles.LP_values(end) <=180 && start_pos >= 180)
+    start_pos = 360-start_pos;
+elseif (handles.LP_values(end) <=360 && start_pos >= 360)
     start_pos = 360-start_pos;
 end
 % Changes the order if the start position is closer to 180deg than 0deg:
-if start_pos > 90
+if (handles.LP_values(end) <=180 && start_pos > 90)
     LP = LP(end:-1:1);
     change_order = 1;
 else
@@ -750,12 +796,14 @@ I = zeros(1,length(LP));
 
 % Time required to take one measurement:
 t = sum(handles.meas_time.*[3600 60 1]);
-
+% jj = 1;
 % Measures the intensity as a function of the angles of the analyzer:
-for i = 1:length(LP)
+for ii = 1:length(LP)
     % Moves the analyzer to the correct angle:
-%     handles.LP.MoveAbsoluteRot(0,LP(i),0,3,1); %m
-    move_rot_mp(handles.LP_str, handles.LP, LP(i), 1)
+%     handles.LP.MoveAbsoluteRot(0,LP(ii),0,3,1); %m
+    handles.table_single_settings.Data = [handles.table_single_settings.Data(1) ...
+    handles.table_single_settings.Data(2), LP(ii)]; % !!
+    move_rot_mp(handles.LP_str, handles.LP, LP(ii), 1)
     % Asks the power meter to take a measurement:
 % %     handles.EM.SendCommandOrQuery(0,'CONFigure:STATistics:STARt'); 
     % Wait for the power meter to finish:
@@ -780,7 +828,8 @@ for i = 1:length(LP)
         end
     end
 % %     disp(tmp) % it's ok, there is no latencies
-    I(i) = median(tmp); % it's a median
+    I(ii) = median(tmp); % it's a median
+    set(handles.meas_intens, 'String', sprintf('%.2f', I(ii)));
 end
 % If the LP order was inverted:
 if change_order == 1
@@ -796,13 +845,13 @@ timeout = 1; numchanAI = 1; numsample = 1;
 
 % --- Plots the polarization of the laser for a given HWP and QWP angle
 % --- combination as part of the polarization map:
-function [handles,p] = plot_polarization(handles, i, j)
+function [handles,p] = plot_polarization(handles, ii, jj)
 % handles    structure with handles and user data (see GUIDATA)
-% i, j       the index of the QWP and HWP of the current measurement
+% ii, jj       the index of the QWP and HWP of the current measurement
 % p          the parameters from the fitting
 
 % Retrieves the correct measurement based on the current QWP and HWP angle:
-I = squeeze(handles.intensity_measurements(i,j,:))';
+I = squeeze(handles.intensity_measurements(ii,jj,:))';
 LP = handles.LP_values;
 % Adds the inverted datapoints such that the measurement is
 % centro-symmetric:
@@ -826,8 +875,8 @@ axis('equal')
 
 % Stores the fitted parameters:
 E = sort(p(1:2));
-handles.fitted_parameters.E_max(i,j) = E(2);
-handles.fitted_parameters.E_min(i,j) = E(1);
+handles.fitted_parameters.E_max(ii,jj) = E(2);
+handles.fitted_parameters.E_min(ii,jj) = E(1);
 % The fitted angle is always the angle between the x-axis and p(1), while 
 % we want the angle between the x-axis and the maximum component of the 
 % electric field. Therefor if p(1) is the minimum component we should add 
@@ -837,17 +886,17 @@ if E(1) == p(1)
 end
 % Converts the angle to the range 0-180degrees:
 p(3) = p(3) - floor(p(3)/180)*180;
-handles.fitted_parameters.pol_angle(i,j) = p(3);
+handles.fitted_parameters.pol_angle(ii,jj) = p(3);
 
 % Enters the measurement in the single measurement table:
-handles.table_single_settings.Data = [handles.QWP_values(i,j) ...
-    handles.HWP_values(i,j)];
+handles.table_single_settings.Data = [handles.QWP_values(ii,jj) ...
+    handles.HWP_values(ii,jj), handles.LP_values(1)];
 handles.table_single_results.Data = [E(1)^2 E(2)^2 round(p(3))];
 
 % Plots the polarization in the overview image:
 figure(handles.overview_figure)
 [k,l] = size(handles.QWP_values);
-h = subplot('Position',[i/(k+1),(l-j)/(l+1),1/(k+1),1/(l+1)]);
+h = subplot('Position',[ii/(k+1),(l-jj)/(l+1),1/(k+1),1/(l+1)]);
 plot(x,y,'b.',x_fit,y_fit,'r');
 % fact = 0.22;
 % axis([-fact, fact, -fact, fact])
@@ -859,16 +908,16 @@ plot(x,y,'b.',x_fit,y_fit,'r');
 % uiopen('E:\MAXIME\Carac microscope\Polar controlée\polar measurement\stage_path_nothing\HWP_QWP_ellipticity.fig',1)
 axis('equal')
 set(h,'xtick',[],'ytick',[],'box','off','xcolor','w','ycolor','w')
-if j == 1 && i == ceil(k/2)
-    title({'QWP [deg]';num2str(handles.QWP_values(i,j))},'fontweight','normal')
-elseif j == 1
-    title(num2str(handles.QWP_values(i,j)),'fontweight','normal')
+if jj == 1 && ii == ceil(k/2)
+    title({'QWP [deg]';num2str(handles.QWP_values(ii,jj))},'fontweight','normal')
+elseif jj == 1
+    title(num2str(handles.QWP_values(ii,jj)),'fontweight','normal')
 end
-if i == 1 && j == ceil(l/2)
-    ylabel({'HWP [deg]';num2str(handles.HWP_values(i,j))})
+if ii == 1 && jj == ceil(l/2)
+    ylabel({'HWP [deg]';num2str(handles.HWP_values(ii,jj))})
     set(h,'ycolor','k')
-elseif i == 1
-    ylabel(num2str(handles.HWP_values(i,j)))
+elseif ii == 1
+    ylabel(num2str(handles.HWP_values(ii,jj)))
     set(h,'ycolor','k')
 end
 
@@ -993,9 +1042,9 @@ handles.table_CP.Data = [QWP_circ;HWP_circ];
 % Solves theoretical model for LP light:
 WP_diff = (0:1:180);
 QWP_rel = zeros(2,length(WP_diff));
-for i = 1:length(WP_diff)
-    QWP_rel(1,i) = 0.5*atand(-tand(delta)*sind(2*WP_diff(i)));
-    QWP_rel(2,i) = 0.5*(180+atand(-tand(delta)*sind(2*WP_diff(i))));
+for ii = 1:length(WP_diff)
+    QWP_rel(1,ii) = 0.5*atand(-tand(delta)*sind(2*WP_diff(ii)));
+    QWP_rel(2,ii) = 0.5*(180+atand(-tand(delta)*sind(2*WP_diff(ii))));
 end
 HWP_rel = 0.5*([WP_diff;WP_diff]+QWP_rel);
 % The results:
@@ -1009,11 +1058,11 @@ QWP_LP = (QWP_LP-180*floor(QWP_LP/180));
 I_LP = zeros(length(HWP_LP),1);
 angle_LP = zeros(length(HWP_LP),1);
 % For all HWP and QWP combinations that provide linearly polarized light:
-for i = 1:length(HWP_LP)
+for ii = 1:length(HWP_LP)
     % The variables:
     LP = 0:10:360; n = length(LP);
-    QWP = repmat(QWP_LP(i),1,n);
-    HWP = repmat(HWP_LP(i),1,n);
+    QWP = repmat(QWP_LP(ii),1,n);
+    HWP = repmat(HWP_LP(ii),1,n);
     X = [HWP(:) QWP(:) LP(:)];
     % The parameters:
     P(1) = handles.fitted_parameters.I0;
@@ -1028,7 +1077,7 @@ for i = 1:length(HWP_LP)
     p = lsqcurvefit(@intensity_fitting,[1,0.5,0],LP,I');
     % Finds the maximum intensity:
     E = sort(p(1:2));
-    I_LP(i) = E(2)^2;
+    I_LP(ii) = E(2)^2;
     % The fitted angle is always the angle between the x-axis and p(1),  
     % while we want the angle between the x-axis and the maximum component 
     % of the electric field. Therefor if p(1) is the minimum component we 
@@ -1037,22 +1086,22 @@ for i = 1:length(HWP_LP)
         p(3) = p(3)+90;
     end
     p(3) = p(3) - floor(p(3)/180)*180;
-    angle_LP(i) = round(p(3));
+    angle_LP(ii) = round(p(3));
 end
 % Sorts the values based on the polarization angle:
-[angle_LP,i] = sort(angle_LP); % i = 1:length(HWP_LP)
+[angle_LP,ii] = sort(angle_LP); % ii = 1:length(HWP_LP)
 
-% QWP_LP(i) = QWP_LP(i) + handles.QWP_values(1); % %  mp !!!
-% HWP_LP(i) = HWP_LP(i) + handles.HWP_values(1); % %  mp !!!
+% QWP_LP(ii) = QWP_LP(ii) + handles.QWP_values(1); % %  mp !!!
+% HWP_LP(ii) = HWP_LP(ii) + handles.HWP_values(1); % %  mp !!!
 if handles.QWP_values(1) > 180
-    QWP_LP(i) = QWP_LP(i) + 180; % %  mp !!!
+    QWP_LP(ii) = QWP_LP(ii) + 180; % %  mp !!!
 end
 if handles.HWP_values(1) > 180
-    HWP_LP(i) = HWP_LP(i) + 180; % %  mp !!!
+    HWP_LP(ii) = HWP_LP(ii) + 180; % %  mp !!!
 end
 
 % Stores the linearly polarized data in the appropriate table:
-handles.table_LP.Data = [QWP_LP(i) HWP_LP(i) I_LP(i) angle_LP]; % i = 1:length(HWP_LP)
+handles.table_LP.Data = [QWP_LP(ii) HWP_LP(ii) I_LP(ii) angle_LP]; % ii = 1:length(HWP_LP)
 
 % --- Deletes all previous results:
 function [handles] = clear_results(handles)
@@ -1167,7 +1216,7 @@ I = (p(1)*cosd(a-p(3))).^2 + (p(2)*sind(a-p(3))).^2;
 % --- microscope specific parameters:
 function I = polarization_fitting(P,X)
 % P         Microscope parameters
-% X         The variables (i.e. HWP, QWP and analyzer angles)
+% X         The variables (ii.e. HWP, QWP and analyzer angles)
 % I         An array containing the intensities that correspond to the 
 %           given input angles and parameters.
 
@@ -1588,6 +1637,8 @@ else
     in.HWSerialNum(3,1) = 0;
 end
 in.LP_stepsize = handles.LP_stepsize;
+if isfield(handles, 'LP_range'); in.LP_range = handles.LP_range; else; in.LP_range = [0,180]; end
+
 in.wavelength = handles.wavelength;
 in.meas_time = handles.meas_time;
 in.meas_freq = handles.meas_freq;
@@ -1615,16 +1666,27 @@ if (strcmp(handles.QWP_str , 'thorlabs') && isa(handles.QWP, 'COM.MGMOTOR_MGMoto
     handles.QWP.HWSerialNum = out.HWSerialNum(3);
 end
 handles.LP_stepsize = out.LP_stepsize;
+if ~isfield(out, 'LP_range'); out.LP_range = [0,180]; end
+handles.LP_range = out.LP_range;
+handles.LP_range_str = out.LP_range_str; handles.LP_range = [0,180];
+try, handles.LP_range(1) = str2double(handles.LP_range_str{1}); %#ok<TRYNC,NOCOM>
+end
+try, handles.LP_range(2) = str2double(handles.LP_range_str{2}); %#ok<TRYNC,NOCOM>
+end
 handles.wavelength = out.wavelength;
 handles.meas_time = out.meas_time;
 handles.meas_freq = out.meas_freq;
 handles.HWP_resolution = out.HWP_resolution;
 handles.QWP_resolution = out.QWP_resolution;
-handles.HWP_range = out.HWP_range;
-handles.QWP_range = out.QWP_range;
 handles.arr_2exclude = out.arr_2exclude;
 handles.no_use_hwp = out.no_use_hwp;
 handles.no_use_qwp = out.no_use_qwp;
+if handles.no_use_hwp; handles.HWP_range = [0,0]; handles.arr_2exclude=handles.arr_2exclude(1,:);
+else; handles.HWP_range = out.HWP_range;
+end
+if handles.no_use_qwp; handles.QWP_range = [0,0]; handles.arr_2exclude=handles.arr_2exclude(:,1);
+else; handles.QWP_range = out.QWP_range;
+end
 disp('in main');
 disp(cat(2, [NaN; (handles.HWP_range(1):handles.HWP_resolution:handles.HWP_range(2))'], ...
 cat(1, (handles.QWP_range(1):handles.QWP_resolution:handles.QWP_range(2)), handles.arr_2exclude))); 
@@ -1901,6 +1963,9 @@ elseif length(strcell{ind})> 3 % com smthg
     reinit_com_mp(strcell{ind})
 end
 handles.dev_on_list(ind) = 0;
+
+% Update handles structure
+guidata(hObject, handles);
 
 % --- Executes on selection change in list_com.
 function list_com_Callback(hObject, eventdata, handles)
@@ -2251,8 +2316,11 @@ else % conn
     set(handles.disc_EM_push, 'String', 'disc EM');
     if sum(handles.dev_on_list) >= (4-handles.no_use_hwp-handles.no_use_qwp)
         set(handles.push_single, 'Enable', 'on');
+    end
+    if sum(handles.dev_on_list) >= 3 % EM + LP + either hwp or QWP
         set(handles.push_start,  'Enable', 'on');
     end
+
 end
 guidata(hObject, handles);
 
@@ -2265,3 +2333,76 @@ function lut_push_Callback(hObject, eventdata, handles)
 
 imcontrast(handles.axes_result)
 
+
+% --------------------------------------------------------------------
+function home_menu_Callback(hObject, eventdata, handles)
+% hObject    handle to home_menu (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+
+% --------------------------------------------------------------------
+function home_qwp_menu_Callback(hObject, eventdata, handles)
+% hObject    handle to home_qwp_menu (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% {handles.EM, handles.LP}  QWP  HWP
+
+home_mot_mp(handles.QWP_str, handles.QWP);
+
+% --------------------------------------------------------------------
+function home_lp_menu_Callback(hObject, eventdata, handles)
+% hObject    handle to home_lp_menu (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% {handles.EM, handles.LP}  QWP  HWP
+
+home_mot_mp(handles.LP_str, handles.LP);
+
+% --------------------------------------------------------------------
+function home_hwp_menu_Callback(hObject, eventdata, handles)
+% hObject    handle to home_hwp_menu (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% {handles.EM, handles.LP}  QWP  HWP
+
+home_mot_mp(handles.HWP_str, handles.HWP);
+
+
+% --------------------------------------------------------------------
+function set_pos_menu_Callback(hObject, eventdata, handles)
+% hObject    handle to set_pos_menu (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+ % QWP, HWP, LP
+% handles.table_single_settings.Data
+% [qwp, hwp, lp] =cell2mat(handles.table_single_settings.Data);
+if (~handles.no_use_qwp && handles.avl_list(3) && isfield(handles, 'QWP'))
+    a=handles.table_single_settings.Data(1);
+    if ~isempty(a)
+        move_rot_mp(handles.QWP_str, handles.QWP, a, 0);    
+    end
+end
+if (~handles.no_use_hwp && handles.avl_list(4) && isfield(handles, 'HWP'))
+    a=handles.table_single_settings.Data(2);
+    if ~isempty(a)
+        move_rot_mp(handles.HWP_str, handles.HWP, a, 0);
+    end
+end
+if (handles.avl_list(2) && isfield(handles, 'LP') )
+    a=handles.table_single_settings.Data(3);
+    if ~isempty(a)
+        move_rot_mp(handles.LP_str, handles.LP,  a, 0)
+    end
+end
+% no wait
+% % if ~handles.no_use_qwp
+% %     wait_move(handles.QWP, handles.QWP_str);
+% % end
+% % if ~handles.no_use_hwp
+% %     wait_move(handles.HWP, handles.HWP_str);
+% % end

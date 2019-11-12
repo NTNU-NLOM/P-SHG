@@ -288,8 +288,13 @@ function push_connect_Callback(hObject, eventdata, handles)
 
 % Connects to the motors and power meter:
 instr_l = {};ins_str ={};
-if ~isa(handles.EM, 'double'); instr_l{end+1} = handles.EM; ins_str{end+1} = handles.EM_str; end% if it's a double, not here
-if ~isa(handles.LP, 'double'); instr_l{end+1} = handles.LP; ins_str{end+1} = handles.LP_str; end% if it's a double, not here
+if ~isa(handles.EM, 'double'); instr_l{end+1} = handles.EM; ins_str{end+1} = handles.EM_str; end % if it's a double, not here
+if ~isa(handles.LP, 'double'); instr_l{end+1} = handles.LP; ins_str{end+1} = handles.LP_str; 
+else
+    try %#ok<TRYNC>
+        handles.LP = open_com_mp(get(handles.LP_str_edt, 'String'), handles.baud_rate_LP, handles.tag_str_LP, handles.timeout_read_LP, 1);
+    end
+end % if it's a double, not here
 names={'EM', 'LP'}; %, 'QWP','HWP'};
 if (~handles.no_use_qwp && isfield(handles, 'QWP') ) % use qwp
     instr_l{end+1} = handles.QWP;
@@ -829,6 +834,9 @@ for ii = 1:length(LP)
     end
 % %     disp(tmp) % it's ok, there is no latencies
     I(ii) = median(tmp); % it's a median
+    if ((isfield(handles, 'libdaq') && ~isempty(handles.libdaq)) && I(ii) > 3.2)
+        fprintf(2,'INRS PMT R6357+C7319 on NI6110 card AI0 has saturation at 3.2 (meas. %.1f)! \n', I(ii));
+    end
     set(handles.meas_intens, 'String', sprintf('%.2f', I(ii)));
 end
 % If the LP order was inverted:
@@ -1388,7 +1396,9 @@ if (isfield(handles, 'libdaq') && ~isempty(handles.libdaq)) % %
     if libisloaded(handles.libdaq); unloadlibrary(handles.libdaq) % checks if library is loaded
     end
 else
-    fclose(handles.EM);%p
+    try %#ok<TRYNC>
+        fclose(handles.EM);%p
+    end          
 end
 disp('EM discon.');
 handles.avl_list(1) = 0;
@@ -2319,6 +2329,7 @@ else % conn
     end
     if sum(handles.dev_on_list) >= 3 % EM + LP + either hwp or QWP
         set(handles.push_start,  'Enable', 'on');
+        set(handles.push_single, 'Enable', 'on');
     end
 
 end

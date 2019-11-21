@@ -168,8 +168,10 @@ handles.HWP_range = [0, 60];
 handles.QWP_range = [0, 150];
 handles.HWP_resolution = 30;
 handles.QWP_resolution = 30;
-
+handles.LP_range = [0, 180];
 handles.sn_list = [];
+ss=get(handles.list_com, 'String');
+handles.strLPdflt = ss{1};
 
 % Opens a window containing all the activex controls necessary:
 handles.actx_figure = figure('Name', 'ActiveX');
@@ -230,7 +232,15 @@ else
     if (handles.avl_list(3) || try_anyway) % [com_str_EM, com_str_LP, com_str_qwp, com_str_hwp]
         
        handles.QWP = open_com_mp(com_str_qwp, handles.baud_rate_QWP, handles.tag_str_QWP, handles.timeout_read_QWP, 1);
-       disp('QWP instr here')
+       
+       try  
+          qwp_op = strcmp(handles.QWP.Status, 'open'); 
+       catch
+          qwp_op = 0; 
+       end
+       if qwp_op
+          disp('QWP instr here')
+       end
     end
 end
 
@@ -239,16 +249,16 @@ if strcmp(handles.HWP_str , 'thorlabs')
     handles.sn_list{end+1} = 83842617; %!
     handles.HWP = open_actX([0 0 400 400], handles.sn_list{end});
 % %     handles.HWP = actxcontrol('MGMOTOR.MGMotorCtrl.1', [0 0 400 400]); %m
-    if ~isempty(handles.HWP)
-        disp('tl instr here')
+    if (~isempty(handles.HWP))
+        disp('tl HWP instr port ok')
         handles.HWP.HWSerialNum = handles.sn_list{end}; %!
-        handles.avl_list(4) = 1;
+        handles.avl_list(4) = 1;    
     end  
 else
     handles.sn_list{end+1} = 0;
     if handles.avl_list(4)% [com_str_EM, com_str_LP, com_str_qwp, com_str_hwp]
         handles.HWP = open_com_mp(com_str_hwp, handles.baud_rate_HWP, handles.tag_str_HWP, handles.timeout_read_HWP, 1);
-        disp('HWP instr here')
+        disp('HWP instr port ok')
     end
 end
 
@@ -323,8 +333,16 @@ for ii=0:(length(instr_l)-1)
     guidata(hObject, handles);
 end
 for ii=0:(length(instr_l)-1) % % EM, LP, QWP, HWP
-    if (handles.dev_on_list(ii+1) && ii >0) % % not EM
-        home_mot_mp(ins_str{ii+1}, instr_l{ii+1}); % home simultaneously
+    if (handles.dev_on_list(ii+1) && ii > 0) % % not EM
+        mot_obj = instr_l{ii+1};
+        try
+            if (strcmp(ins_str{ii+1}, 'thorlabs') || strcmp(mot_obj.Status, 'open'))
+                home_mot_mp(ins_str{ii+1}, mot_obj); % home simultaneously
+            else
+                error('not here')  
+            end
+        catch ME; warning(ins_str{ii+1}); disp(ME);
+        end
     end
 end
 for ii=0:(length(instr_l)-1) % % continued
@@ -393,6 +411,10 @@ function push_start_Callback(hObject, eventdata, handles)
 % hObject    handle to push_start (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
+
+if ~isfield(handles,'LP_range') % LP not here
+    fprintf(2, 'no polarizer !\n');return
+end
 
 % Removes all previous results:
 set(handles.path_disp, 'String', '');
@@ -676,7 +698,9 @@ function push_single_Callback(hObject, eventdata, handles)
 % hObject    handle to push_single (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-
+if ~isfield(handles,'LP_range') % LP not here
+    fprintf(2, 'no polarizer !\n');return
+end
 % Retrieves the HWP and QWP angle for the polarization measurement:
 d = handles.table_single_settings.Data;
 QWP = d(1); HWP = d(2);
@@ -1312,40 +1336,54 @@ function handles = connect_actx(handles, ins_str, names, ii, instr, part)
 % handles.EM.GetNextString(0); %p
 
 % Initializes the motors:
-% % handles.LP.StartCtrl; %m
-% % handles.HWP.StartCtrl; %m
-% % handles.QWP.StartCtrl; %m
+% % handles.LP.StartCtrl; %m handles.HWP.S %m handles.QWP.St; %m
 
 % % instrs=[handles.LP, handles.QWP, handles.HWP];
+connected = 1;
 switch part
-    case 1
-        if (isfield(handles, names{ii+1}) && ~handles.dev_on_list(ii+1))
+    case 1  
+        if (isfield(handles, names{ii+1}) && (~handles.dev_on_list(ii+1) || ~handles.avl_list(ii+1)))
             disp(['checking ' ins_str{ii+1} ' ...']);
-            try
-                [connected, handles] = stctrl_instr_mp(handles, ins_str{ii+1}, instr);
+            try; [connected, handles] = stctrl_instr_mp(handles, ins_str{ii+1}, instr); %#ok<NOSEM>
             catch ME
                 fprintf('ERR devices %s \n', ins_str{ii+1});
                 rethrow(ME);
             end
-            handles.dev_on_list(ii+1) = connected; % EM, LP, QWP, HWP
+            if ~(strcmp(ins_str{ii+1}, 'thorlabs') || strcmp(ins_str{ii+1} , 'nidaq')) % COM port
+                if ~strcmp(instr.Status, 'open')
+                    connected = 0;
+                end
+            end
+            if (connected && ~strcmp(ins_str{ii+1} , 'nidaq'))
+                [handles,connected] = checkctrl_instr_mp(handles, ins_str{ii+1}, instr);
+            end
         end
-    case 2
+        handles.dev_on_list(ii+1) = connected; % EM, LP, QWP, HWP
+    case 2 % % 2nd part
+        str = 'NOT HERE';
         if handles.dev_on_list(ii+1)
             if strcmp(ins_str{ii+1},'thorlabs')
                 pause(0.5) % Gives the GUI time to update:
             elseif (ii == 0 && isfield(handles, 'funclistNIdaq')) % % effct-meter NI
                 handles = daq_openchan_mp(handles);
                 fprintf('DAQ read is %f\n', daq_read_mp(handles.libdaq, handles.EM, handles));
+                [handles,connected] = checkctrl_instr_mp(handles, ins_str{ii+1}, instr);
             else
-                wait_move(instr, ins_str{ii+1});
-                if strcmp(ins_str{ii+1},'newport')
-                    disp(query(instr,'1TP?\r'));
-                elseif strcmp(ins_str{ii+1},'micos')
-                    disp(query(instr,'1 npos ')); % get pos
+                if strcmp(instr.Status, 'open')
+                    wait_move(instr, ins_str{ii+1});
+                    if strcmp(ins_str{ii+1},'newport')
+                        disp(query(instr,'1TP?\r'));
+                    elseif strcmp(ins_str{ii+1},'micos')
+                        disp(query(instr,'1 npos ')); % get pos
+                    end
                 end
             end
-            fprintf('\n %s instr ON \n', ins_str{ii+1})
+            handles.avl_list(ii+1) = connected;
+            if (handles.dev_on_list(ii+1) && handles.avl_list(ii+1))
+                str = 'ON';
+            end    
         end
+        fprintf('\n %s instr %s \n', ins_str{ii+1},str)
 end
 
 % --- Disconnects the motors and power meters:
@@ -1786,7 +1824,7 @@ function home_mot_mp(str_mot, mot_obj)
     
 function wait_move(mot_obj, id)
     ct=0;
-    while ct<17 
+    while ct<10 
         switch id 
             case 'newport'
                 a = query(mot_obj, '1MD?\r');
@@ -1807,7 +1845,7 @@ function wait_move(mot_obj, id)
     
 function [connected, handles] = stctrl_instr_mp(handles, str_mot, mot_obj)
 % % 2018.8 Maxime Pinsard
-
+    connected = 1;
     if (~strcmp(str_mot, 'thorlabs') && ~strcmp(str_mot , 'nidaq'))
         try
             fopen(mot_obj);  %p
@@ -1821,6 +1859,16 @@ function [connected, handles] = stctrl_instr_mp(handles, str_mot, mot_obj)
             end
         end
     end
+    
+    switch str_mot
+        case 'thorlabs' % Z rot
+            mot_obj.StartCtrl;
+        case 'nidaq'
+            ss=get(handles.list_com, 'String');
+            handles = daq_conn_mp(handles, ss{1});
+    end
+    
+function [handles,connected] = checkctrl_instr_mp(handles, str_mot, mot_obj)
     connected = 1;
     switch str_mot
         case 'micos' % DT80
@@ -1840,9 +1888,18 @@ function [connected, handles] = stctrl_instr_mp(handles, str_mot, mot_obj)
                 connected = 0;
             end
             fprintf(mot_obj, '1MO'); % puts the motor on
-        case 'thorlabs' % Z rot
-            mot_obj.StartCtrl;
-        case 'tl_pm' % power meter
+            
+        case 'thorlabs' % Z rot HWP
+            try cond=handles.HWP.GetPosition_Position(0)~=-9999;
+            catch
+                cond=0;
+            end
+            if cond % here and detected
+               disp('hwp ok')
+            else
+                connected = 0;
+            end
+         case 'tl_pm' % power meter
             lastwarn(''); % Clear last warning message
             disp(query(mot_obj,'*IDN?')) %p
             disp(query(mot_obj,':HEAD:INFO?')); % S/N, ID-Text, short description, Maximum Power)
@@ -1852,8 +1909,9 @@ function [connected, handles] = stctrl_instr_mp(handles, str_mot, mot_obj)
                 connected = 0;
             end
         case 'nidaq'
-            ss=get(handles.list_com, 'String');
-            handles = daq_conn_mp(handles, ss{1});
+            try; daq_read_mp(handles.libdaq, handles.EM, handles);  %#ok<NOSEM>
+            catch; connected = 0;
+            end
     end
 
 function handles = daq_conn_mp(handles, mot_obj)
@@ -2037,7 +2095,7 @@ if strcmp(get(handles.PM_str_edt,'String'), 'nidaq')
     strcom{1} = 'Dev1';
     chg_sel_push_Callback(handles.chg_sel_push, eventdata, handles)
 else
-    strcom{1} = 'COM5';
+    strcom{1} = handles.strLPdflt;
 end
 set(handles.list_com,'String', strcom);
 
@@ -2227,7 +2285,9 @@ if isempty(findobj('type','figure','name','Activex'))
                     handles.HWP = open_actX([0+(k-1)*100, 0+max(0,(k-2)*100), 400, 400], handles.sn_list{k});
                     handles.HWP.HWSerialNum = handles.sn_list{k};
                     handles.HWP.StartCtrl;
-                    handles.avl_list(4) = 1;
+                    if handles.HWP.GetPosition_Position(0)~=-9999 % here and detected
+                        handles.avl_list(4) = 1;
+                    end
             end
         end
     end
